@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KhataBill — GST + Bookkeeping SaaS</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #F7F6F2;
+    --surface:   #FFFFFF;
+    --border:    #E4E2DA;
+    --border2:   #CCC9BE;
+    --text:      #1A1916;
+    --muted:     #6B6860;
+    --hint:      #A09D96;
+    --accent:    #1A6B47;
+    --accent-lt: #E6F4EE;
+    --accent-dk: #114832;
+    --warn:      #B45309;
+    --warn-lt:   #FEF3C7;
+    --danger:    #B91C1C;
+    --danger-lt: #FEE2E2;
+    --info:      #1D4ED8;
+    --info-lt:   #DBEAFE;
+    --radius:    8px;
+    --radius-lg: 12px;
+    --shadow:    0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.05);
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 230px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow-y: auto;
+  }
+
+  .logo {
+    padding: 20px 18px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo-wordmark {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.3px;
+  }
+  .logo-tag {
+    font-size: 11px;
+    color: var(--hint);
+    margin-top: 1px;
+  }
+  .gstin-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--accent-lt);
+    color: var(--accent-dk);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 20px;
+    margin-top: 8px;
+    letter-spacing: 0.02em;
+  }
+
+  .nav { padding: 10px 8px; flex: 1; }
+  .nav-section {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--hint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 10px 10px 4px;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 1px;
+    transition: background 0.12s, color 0.12s;
+    user-select: none;
+  }
+  .nav-item i { width: 16px; text-align: center; font-size: 14px; }
+  .nav-item:hover { background: var(--bg); color: var(--text); }
+  .nav-item.active {
+    background: var(--accent-lt);
+    color: var(--accent-dk);
+    font-weight: 600;
+  }
+  .nav-badge {
+    margin-left: auto;
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 10px;
+  }
+
+  .sidebar-footer {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--hint);
+  }
+  .plan-badge {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    margin-bottom: 4px;
+  }
+
+  /* ── MAIN ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    height: 54px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .topbar-title { font-size: 15px; font-weight: 600; color: var(--text); flex: 1; }
+  .topbar-actions { display: flex; gap: 8px; align-items: center; }
+
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+  }
+
+  /* ── PAGE ── */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── ALERT ── */
+  .alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    margin-bottom: 20px;
+    border-left: 3px solid;
+  }
+  .alert i { font-size: 15px; margin-top: 1px; flex-shrink: 0; }
+  .alert-warn  { background: var(--warn-lt);   color: var(--warn);   border-color: var(--warn); }
+  .alert-info  { background: var(--info-lt);   color: var(--info);   border-color: var(--info); }
+  .alert-success { background: var(--accent-lt); color: var(--accent-dk); border-color: var(--accent); }
+  .alert-danger  { background: var(--danger-lt); color: var(--danger); border-color: var(--danger); }
+
+  /* ── STAT GRID ── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+  }
+  .stat-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .stat-val   { font-size: 24px; font-weight: 700; color: var(--text); letter-spacing: -0.5px; }
+  .stat-sub   { font-size: 11px; color: var(--hint); margin-top: 4px; }
+  .stat-up    { color: var(--accent); }
+  .stat-down  { color: var(--danger); }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 14px;
+  }
+  .card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .card-row .card-title { margin-bottom: 0; }
+
+  /* ── TABLE ── */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr th, thead tr td {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--hint);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    background: var(--bg);
+  }
+  tbody tr td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #FAFAF8; }
+  .td-mono { font-family: 'Courier New', monospace; font-size: 12px; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border2);
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    transition: background 0.12s, transform 0.1s;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--bg); }
+  .btn:active { transform: scale(0.98); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent-dk); }
+  .btn-primary:hover { background: var(--accent-dk); }
+  .btn-warn { background: var(--warn-lt); color: var(--warn); border-color: #D97706; }
+  .btn-danger { background: var(--danger-lt); color: var(--danger); border-color: #DC2626; }
+  .btn-icon { padding: 6px 8px; }
+
+  /* ── STATUS PILLS ── */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
+    letter-spacing: 0.02em;
+  }
+  .pill-success { background: var(--accent-lt); color: var(--accent-dk); }
+  .pill-warn    { background: var(--warn-lt);   color: var(--warn); }
+  .pill-danger  { background: var(--danger-lt); color: var(--danger); }
+  .pill-info    { background: var(--info-lt);   color: var(--info); }
+  .pill-neutral { background: var(--bg);        color: var(--muted); border: 1px solid var(--border); }
+
+  /* ── FORMS ── */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group.full { grid-column: 1 / -1; }
+  .form-group label { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    font-size: 13px;
+    padding: 8px 10px;
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .form-group input:focus,
+  .form-group select:focus,
+  .form-group textarea:focus { border-color: var(--accent); }
+  .form-group textarea { resize: vertical; min-height: 70px; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: 28px 28px 22px;
+    width: 520px;
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+    animation: modal-in 0.18s ease;
+  }
+  @keyframes modal-in { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .modal-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+  .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    background: var(--text);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 12px 18px;
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    z-index: 9999;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    animation: slide-in 0.2s ease;
+  }
+  @keyframes slide-in { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  /* ── GRID LAYOUTS ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+
+  /* ── RETURN CARDS ── */
+  .return-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .return-card.due { border-color: #F59E0B; }
+  .return-name { font-size: 15px; font-weight: 700; color: var(--text); }
+  .return-desc { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .return-meta { font-size: 11px; color: var(--hint); margin-top: 4px; }
+  .return-actions { margin-top: 10px; display: flex; gap: 8px; }
+
+  /* ── KHATA PARTIES ── */
+  .party-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .party-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.12s;
+    background: var(--surface);
+  }
+  .party-chip:hover { border-color: var(--accent); color: var(--accent-dk); }
+  .party-chip.credit { color: var(--accent-dk); border-color: #6EE7B7; background: var(--accent-lt); }
+  .party-chip.debit  { color: var(--danger);    border-color: #FCA5A5; background: var(--danger-lt); }
+
+  /* ── ITR STEPS ── */
+  .itr-checklist { display: flex; flex-direction: column; gap: 0; }
+  .itr-step {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .itr-step:last-child { border-bottom: none; }
+  .step-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--info-lt);
+    color: var(--info);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .step-num.done { background: var(--accent-lt); color: var(--accent-dk); }
+  .step-body { flex: 1; }
+  .step-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .step-desc  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  /* ── FILING PROGRESS ── */
+  .filing-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    margin-bottom: 6px;
+    background: var(--bg);
+    font-size: 13px;
+  }
+  .filing-row.done { background: var(--accent-lt); }
+  .filing-row.done span { color: var(--accent-dk); }
+
+  /* ── REPORT TILES ── */
+  .report-tile {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    box-shadow: var(--shadow);
+  }
+  .report-tile:hover { border-color: var(--accent); box-shadow: 0 4px 14px rgba(26,107,71,0.12); }
+  .report-tile i { font-size: 28px; margin-bottom: 10px; display: block; }
+  .report-tile-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .report-tile-sub   { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+  /* ── DASHBOARD ACTIVITY ── */
+  .activity-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .ai-green  { background: var(--accent-lt); color: var(--accent); }
+  .ai-red    { background: var(--danger-lt); color: var(--danger); }
+  .ai-amber  { background: var(--warn-lt);   color: var(--warn); }
+  .ai-blue   { background: var(--info-lt);   color: var(--info); }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 10px; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    .sidebar { width: 54px; }
+    .logo-wordmark, .logo-tag, .gstin-badge, .nav-section, .nav-item span, .sidebar-footer { display: none; }
+    .nav-item { justify-content: center; padding: 10px; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .two-col, .three-col { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .stat-grid { grid-template-columns: 1fr 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+    .content { padding: 14px; }
+    .modal-box { padding: 18px 14px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════ SIDEBAR ══════════ -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-wordmark">KhataBill</div>
+    <div class="logo-tag">GST + Bookkeeping SaaS</div>
+    <div class="gstin-badge"><i class="fas fa-check-circle"></i> GSTIN Verified</div>
+  </div>
+  <nav class="nav">
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" data-page="dashboard"><i class="fas fa-chart-pie"></i> <span>Dashboard</span></div>
+
+    <div class="nav-section">Finance</div>
+    <div class="nav-item" data-page="khata"><i class="fas fa-book"></i> <span>Khata Book</span></div>
+    <div class="nav-item" data-page="invoices"><i class="fas fa-file-invoice"></i> <span>Invoices</span><span class="nav-badge">2</span></div>
+    <div class="nav-item" data-page="expenses"><i class="fas fa-wallet"></i> <span>Expenses</span></div>
+
+    <div class="nav-section">Tax Filing</div>
+    <div class="nav-item" data-page="gst"><i class="fas fa-landmark"></i> <span>GST Filing</span><span class="nav-badge">!</span></div>
+    <div class="nav-item" data-page="itr"><i class="fas fa-file-signature"></i> <span>ITR Filing</span></div>
+
+    <div class="nav-section">Business</div>
+    <div class="nav-item" data-page="reports"><i class="fas fa-chart-bar"></i> <span>Reports</span></div>
+    <div class="nav-item" data-page="whatsapp"><i class="fab fa-whatsapp"></i> <span>WhatsApp UX</span></div>
+    <div class="nav-item" data-page="settings"><i class="fas fa-cog"></i> <span>Settings</span></div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="plan-badge">PRO PLAN</div>
+    <div>Sharma Cloth House</div>
+    <div>₹499 / month</div>
+  </div>
+</aside>
+
+<!-- ══════════ MAIN ══════════ -->
+<div class="main">
+  <header class="topbar">
+    <div class="topbar-title" id="topbar-title">Dashboard</div>
+    <div class="topbar-actions">
+      <button class="btn btn-sm" onclick="openModal('wa-quick-modal')"><i class="fab fa-whatsapp"></i> Quick Entry</button>
+      <button class="btn btn-sm btn-primary" onclick="openModal('new-invoice-modal')"><i class="fas fa-plus"></i> New Invoice</button>
+    </div>
+  </header>
+
+  <main class="content">
+
+    <!-- ════════ PAGE: DASHBOARD ════════ -->
+    <div class="page active" id="page-dashboard">
+      <div class="alert alert-warn">
+        <i class="fas fa-exclamation-triangle"></i>
+        <div><strong>GSTR-3B due in 4 days</strong> — July 20, 2025. Net tax payable: ₹12,480. File before the deadline to avoid ₹50/day late fee.</div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">Sales this month</div>
+          <div class="stat-val">₹2,84,500</div>
+          <div class="stat-sub stat-up"><i class="fas fa-arrow-up"></i> 12% vs last month</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">GST Collected (Output)</div>
+          <div class="stat-val">₹34,140</div>
+          <div class="stat-sub">From sales invoices</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">GST Paid (Input ITC)</div>
+          <div class="stat-val">₹21,660</div>
+          <div class="stat-sub stat-up">Claimable credit</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Net GST Payable</div>
+          <div class="stat-val stat-down">₹12,480</div>
+          <div class="stat-sub">Due by 20 Jul 2025</div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title">Recent Transactions</div>
+          <table>
+            <thead><tr><th>Party</th><th>Type</th><th>Amount</th><th>GST</th></tr></thead>
+            <tbody>
+              <tr><td>Ramesh Traders</td><td><span class="pill pill-success">Sale</span></td><td>₹45,000</td><td>₹8,100</td></tr>
+              <tr><td>Suresh Cloth House</td><td><span class="pill pill-success">Sale</span></td><td>₹28,500</td><td>₹5,130</td></tr>
+              <tr><td>Bharat Suppliers</td><td><span class="pill pill-info">Purchase</span></td><td>₹62,000</td><td>₹11,160</td></tr>
+              <tr><td>Anita General Store</td><td><span class="pill pill-success">Sale</span></td><td>₹15,200</td><td>₹2,736</td></tr>
+              <tr><td>Vijay Hardware</td><td><span class="pill pill-info">Purchase</span></td><td>₹9,400</td><td>₹1,692</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div class="card">
+            <div class="card-title">Filing Calendar</div>
+            <table>
+              <thead><tr><th>Return</th><th>Period</th><th>Due</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td><strong>GSTR-1</strong></td><td>Jun 2025</td><td>11 Jul</td><td><span class="pill pill-success"><i class="fas fa-check"></i> Filed</span></td></tr>
+                <tr><td><strong>GSTR-3B</strong></td><td>Jun 2025</td><td>20 Jul</td><td><span class="pill pill-warn"><i class="fas fa-clock"></i> Due</span></td></tr>
+                <tr><td><strong>GSTR-1</strong></td><td>Jul 2025</td><td>11 Aug</td><td><span class="pill pill-neutral">Upcoming</span></td></tr>
+                <tr><td><strong>ITR-4</strong></td><td>FY 24-25</td><td>31 Jul</td><td><span class="pill pill-warn"><i class="fas fa-clock"></i> Due</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <div class="card-title">Quick Actions</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              <button class="btn btn-sm btn-primary" onclick="openModal('new-invoice-modal')"><i class="fas fa-plus"></i> New Invoice</button>
+              <button class="btn btn-sm" onclick="openModal('add-entry-modal')"><i class="fas fa-book"></i> Khata Entry</button>
+              <button class="btn btn-sm btn-warn" onclick="goPage('gst')"><i class="fas fa-landmark"></i> File GSTR-3B</button>
+              <button class="btn btn-sm" onclick="openModal('add-expense-modal')"><i class="fas fa-wallet"></i> Add Expense</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Recent Activity</div>
+        <div class="activity-item">
+          <div class="activity-icon ai-green"><i class="fas fa-file-invoice"></i></div>
+          <div style="flex:1"><strong>INV-2025-047</strong> created for Ramesh Traders — ₹53,100</div>
+          <div style="font-size:11px;color:var(--hint)">Today, 10:42 AM</div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-icon ai-blue"><i class="fas fa-check-circle"></i></div>
+          <div style="flex:1">GSTR-1 filed successfully for June 2025 — ARN: AA2707250001233</div>
+          <div style="font-size:11px;color:var(--hint)">11 Jul, 9:15 AM</div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-icon ai-green"><i class="fas fa-rupee-sign"></i></div>
+          <div style="flex:1">Payment of ₹15,000 received from Ramesh Traders</div>
+          <div style="font-size:11px;color:var(--hint)">10 Jul, 4:30 PM</div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-icon ai-amber"><i class="fab fa-whatsapp"></i></div>
+          <div style="flex:1">Payment reminder sent to Suresh Cloth House via WhatsApp</div>
+          <div style="font-size:11px;color:var(--hint)">09 Jul, 11:00 AM</div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-icon ai-red"><i class="fas fa-shopping-cart"></i></div>
+          <div style="flex:1">Purchase recorded from Bharat Suppliers — ₹62,000 (ITC ₹11,160)</div>
+          <div style="font-size:11px;color:var(--hint)">08 Jul, 3:20 PM</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ PAGE: KHATA BOOK ════════ -->
+    <div class="page" id="page-khata">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-row">
+            <div class="card-title">Parties (Udhaari)</div>
+            <button class="btn btn-sm btn-primary" onclick="openModal('add-party-modal')"><i class="fas fa-plus"></i> Add Party</button>
+          </div>
+          <div class="party-list">
+            <span class="party-chip credit" onclick="loadParty('Ramesh Traders',45200,'credit')"><i class="fas fa-arrow-down"></i> Ramesh Traders <strong>₹45,200</strong></span>
+            <span class="party-chip debit"  onclick="loadParty('Mohan Kirana',18500,'debit')"><i class="fas fa-arrow-up"></i> Mohan Kirana <strong>₹18,500</strong></span>
+            <span class="party-chip credit" onclick="loadParty('Priya Cloth',8000,'credit')"><i class="fas fa-arrow-down"></i> Priya Cloth <strong>₹8,000</strong></span>
+            <span class="party-chip debit"  onclick="loadParty('Hari Suppliers',33000,'debit')"><i class="fas fa-arrow-up"></i> Hari Suppliers <strong>₹33,000</strong></span>
+            <span class="party-chip credit" onclick="loadParty('Geeta Fabrics',22100,'credit')"><i class="fas fa-arrow-down"></i> Geeta Fabrics <strong>₹22,100</strong></span>
+            <span class="party-chip credit" onclick="loadParty('Suresh Cloth',12500,'credit')"><i class="fas fa-arrow-down"></i> Suresh Cloth <strong>₹12,500</strong></span>
+          </div>
+          <div style="padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:13px;">
+            <span style="color:var(--accent-dk);font-weight:600"><i class="fas fa-arrow-down"></i> To Receive: ₹87,800</span>
+            <span style="color:var(--danger);font-weight:600"><i class="fas fa-arrow-up"></i> To Pay: ₹51,500</span>
+          </div>
+        </div>
+        <div class="card" id="party-detail-card">
+          <div class="card-title" id="party-detail-title">Party Ledger</div>
+          <div id="party-detail-content" style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center;">
+            <i class="fas fa-hand-pointer" style="font-size:28px;color:var(--hint);margin-bottom:10px;display:block;"></i>
+            Select a party from the left to view their transaction history and send reminders.
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-row">
+          <div class="card-title">Cash Book</div>
+          <button class="btn btn-sm btn-primary" onclick="openModal('add-entry-modal')"><i class="fas fa-plus"></i> Add Entry</button>
+        </div>
+        <table>
+          <thead><tr><th>Date</th><th>Description</th><th>Party</th><th>Credit (In)</th><th>Debit (Out)</th><th>Balance</th></tr></thead>
+          <tbody>
+            <tr><td>10 Jul</td><td>Payment received</td><td>Ramesh Traders</td><td style="color:var(--accent);font-weight:600">+₹15,000</td><td>—</td><td style="font-weight:600">₹48,200</td></tr>
+            <tr><td>09 Jul</td><td>Goods purchased</td><td>Hari Suppliers</td><td>—</td><td style="color:var(--danger);font-weight:600">-₹8,500</td><td style="font-weight:600">₹33,200</td></tr>
+            <tr><td>08 Jul</td><td>Sale to party</td><td>Priya Cloth</td><td style="color:var(--accent);font-weight:600">+₹12,000</td><td>—</td><td style="font-weight:600">₹41,700</td></tr>
+            <tr><td>07 Jul</td><td>Shop rent paid</td><td>—</td><td>—</td><td style="color:var(--danger);font-weight:600">-₹5,000</td><td style="font-weight:600">₹29,700</td></tr>
+            <tr><td>06 Jul</td><td>Sale invoice</td><td>Geeta Fabrics</td><td style="color:var(--accent);font-weight:600">+₹22,000</td><td>—</td><td style="font-weight:600">₹34,700</td></tr>
+            <tr><td>05 Jul</td><td>Stock purchase</td><td>Bharat Suppliers</td><td>—</td><td style="color:var(--danger);font-weight:600">-₹18,000</td><td style="font-weight:600">₹12,700</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ════════ PAGE: INVOICES ════════ -->
+    <div class="page" id="page-invoices">
+      <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">
+        <div class="stat-card"><div class="stat-label">Total Invoices (Jul)</div><div class="stat-val">12</div></div>
+        <div class="stat-card"><div class="stat-label">Amount Pending</div><div class="stat-val stat-down">₹59,590</div></div>
+        <div class="stat-card"><div class="stat-label">Amount Collected</div><div class="stat-val stat-up">₹71,036</div></div>
+      </div>
+      <div class="card-row" style="margin-bottom:14px;">
+        <div style="font-size:15px;font-weight:700;">Tax Invoices</div>
+        <div style="display:flex;gap:8px;">
+          <select class="btn btn-sm" style="border:1px solid var(--border2)">
+            <option>All Invoices</option><option>Paid</option><option>Unpaid</option><option>Overdue</option>
+          </select>
+          <button class="btn btn-sm btn-primary" onclick="openModal('new-invoice-modal')"><i class="fas fa-plus"></i> New Invoice</button>
+        </div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table>
+          <thead><tr><th>Invoice No.</th><th>Date</th><th>Party</th><th>GSTIN</th><th>Taxable</th><th>CGST</th><th>SGST</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="td-mono">INV-2025-047</td><td>10 Jul</td><td>Ramesh Traders</td>
+              <td class="td-mono" style="font-size:11px">27AAACR8285N1ZV</td>
+              <td>₹45,000</td><td>₹4,050</td><td>₹4,050</td><td><strong>₹53,100</strong></td>
+              <td><span class="pill pill-success"><i class="fas fa-check"></i> Paid</span></td>
+              <td><button class="btn btn-sm btn-icon" title="Download"><i class="fas fa-download"></i></button></td>
+            </tr>
+            <tr>
+              <td class="td-mono">INV-2025-046</td><td>09 Jul</td><td>Suresh Cloth</td>
+              <td class="td-mono" style="font-size:11px">27AAGCS5699Q1Z1</td>
+              <td>₹28,500</td><td>₹2,565</td><td>₹2,565</td><td><strong>₹33,630</strong></td>
+              <td><span class="pill pill-warn">Unpaid</span></td>
+              <td>
+                <div style="display:flex;gap:4px;">
+                  <button class="btn btn-sm btn-icon" title="Download"><i class="fas fa-download"></i></button>
+                  <button class="btn btn-sm btn-icon" title="WhatsApp reminder" onclick="showToast('WhatsApp reminder sent to Suresh Cloth ✓')"><i class="fab fa-whatsapp"></i></button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="td-mono">INV-2025-045</td><td>07 Jul</td><td>Anita General Store</td>
+              <td class="td-mono" style="font-size:11px">—</td>
+              <td>₹15,200</td><td>₹1,368</td><td>₹1,368</td><td><strong>₹17,936</strong></td>
+              <td><span class="pill pill-success"><i class="fas fa-check"></i> Paid</span></td>
+              <td><button class="btn btn-sm btn-icon" title="Download"><i class="fas fa-download"></i></button></td>
+            </tr>
+            <tr>
+              <td class="td-mono">INV-2025-044</td><td>05 Jul</td><td>Geeta Fabrics</td>
+              <td class="td-mono" style="font-size:11px">24AACFG4829M1ZC</td>
+              <td>₹22,000</td><td>₹1,980</td><td>₹1,980</td><td><strong>₹25,960</strong></td>
+              <td><span class="pill pill-danger">Overdue</span></td>
+              <td>
+                <div style="display:flex;gap:4px;">
+                  <button class="btn btn-sm btn-icon" title="Download"><i class="fas fa-download"></i></button>
+                  <button class="btn btn-sm btn-icon" title="Send reminder" onclick="showToast('Reminder sent to Geeta Fabrics ✓')"><i class="fab fa-whatsapp"></i></button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ════════ PAGE: EXPENSES ════════ -->
+    <div class="page" id="page-expenses">
+      <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">
+        <div class="stat-card"><div class="stat-label">Total Expenses (Jul)</div><div class="stat-val">₹38,200</div><div class="stat-sub stat-down">↑ 8% vs Jun</div></div>
+        <div class="stat-card"><div class="stat-label">ITC Claimable</div><div class="stat-val stat-up">₹21,660</div><div class="stat-sub">From eligible purchases</div></div>
+        <div class="stat-card"><div class="stat-label">Non-GST Expenses</div><div class="stat-val">₹8,400</div><div class="stat-sub">Rent, salaries, etc.</div></div>
+      </div>
+      <div class="card-row" style="margin-bottom:14px;">
+        <div style="font-size:15px;font-weight:700;">Expense Entries</div>
+        <button class="btn btn-sm btn-primary" onclick="openModal('add-expense-modal')"><i class="fas fa-plus"></i> Add Expense</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table>
+          <thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Vendor</th><th>Amount</th><th>GST Paid</th><th>ITC Eligible</th></tr></thead>
+          <tbody>
+            <tr><td>10 Jul</td><td>Purchase</td><td>Raw material stock</td><td>Bharat Suppliers</td><td>₹62,000</td><td>₹11,160</td><td><span class="pill pill-success"><i class="fas fa-check"></i> Yes</span></td></tr>
+            <tr><td>09 Jul</td><td>Transport</td><td>Freight charges</td><td>Shiva Logistics</td><td>₹2,800</td><td>₹140</td><td><span class="pill pill-success"><i class="fas fa-check"></i> Yes</span></td></tr>
+            <tr><td>08 Jul</td><td>Utilities</td><td>Electricity bill</td><td>MSEB</td><td>₹4,200</td><td>₹756</td><td><span class="pill pill-danger">No</span></td></tr>
+            <tr><td>07 Jul</td><td>Rent</td><td>Shop rent</td><td>Landlord</td><td>₹5,000</td><td>—</td><td><span class="pill pill-danger">No</span></td></tr>
+            <tr><td>05 Jul</td><td>Purchase</td><td>Spare parts</td><td>Vijay Hardware</td><td>₹9,400</td><td>₹1,692</td><td><span class="pill pill-success"><i class="fas fa-check"></i> Yes</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ════════ PAGE: GST FILING ════════ -->
+    <div class="page" id="page-gst">
+      <div class="alert alert-warn">
+        <i class="fas fa-clock"></i>
+        <div><strong>GSTR-3B due July 20, 2025.</strong> Auto-computed from your invoices and purchases. Net tax payable: ₹12,480. File before the deadline to avoid penalty.</div>
+      </div>
+
+      <div class="three-col" style="margin-bottom:20px;">
+        <div class="return-card">
+          <div class="return-name">GSTR-1</div>
+          <div class="return-desc">Outward supplies — Monthly</div>
+          <div><span class="pill pill-success"><i class="fas fa-check"></i> Filed</span></div>
+          <div class="return-meta">Filed on 10 Jul 2025 • Period: Jun 2025 • ARN: AA2707250001233</div>
+          <div class="return-actions">
+            <button class="btn btn-sm"><i class="fas fa-eye"></i> View Return</button>
+            <button class="btn btn-sm"><i class="fas fa-download"></i> PDF</button>
+          </div>
+        </div>
+        <div class="return-card due">
+          <div class="return-name">GSTR-3B</div>
+          <div class="return-desc">Summary return + tax payment</div>
+          <div><span class="pill pill-warn"><i class="fas fa-clock"></i> Due 20 Jul</span></div>
+          <div class="return-meta">Net payable: ₹12,480 • Period: Jun 2025</div>
+          <div class="return-actions">
+            <button class="btn btn-sm btn-primary" onclick="openModal('file-gstr3b-modal')"><i class="fas fa-paper-plane"></i> File Now</button>
+            <button class="btn btn-sm"><i class="fas fa-eye"></i> Preview</button>
+          </div>
+        </div>
+        <div class="return-card">
+          <div class="return-name">GSTR-9</div>
+          <div class="return-desc">Annual return — FY 2024-25</div>
+          <div><span class="pill pill-neutral">Dec 2025</span></div>
+          <div class="return-meta">Will be auto-compiled from monthly returns</div>
+          <div class="return-actions">
+            <button class="btn btn-sm" disabled style="opacity:.5">Not yet available</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">GSTR-3B Auto-Computed Summary — June 2025</div>
+        <table>
+          <thead><tr><th>Head</th><th>Taxable Value</th><th>IGST</th><th>CGST</th><th>SGST</th><th>Total Tax</th></tr></thead>
+          <tbody>
+            <tr><td>Outward taxable supplies (18%)</td><td>₹1,64,500</td><td>—</td><td>₹14,805</td><td>₹14,805</td><td>₹29,610</td></tr>
+            <tr><td>Outward taxable supplies (5%)</td><td>₹1,20,000</td><td>—</td><td>₹3,000</td><td>₹3,000</td><td>₹6,000</td></tr>
+            <tr><td>Zero-rated / exempt</td><td>₹18,500</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+            <tr style="background:var(--accent-lt)"><td style="color:var(--accent-dk)">Less: Input Tax Credit (ITC)</td><td>—</td><td>—</td><td style="color:var(--accent-dk)">-₹10,830</td><td style="color:var(--accent-dk)">-₹10,830</td><td style="color:var(--accent-dk);font-weight:600">-₹21,660</td></tr>
+            <tr style="background:var(--warn-lt)"><td style="font-weight:700">Net Tax Payable</td><td>—</td><td>₹0</td><td style="font-weight:700">₹6,975</td><td style="font-weight:700">₹6,975</td><td style="font-weight:700;color:var(--danger)">₹12,480</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-title">GSTR-2A Reconciliation</div>
+        <div class="alert alert-success" style="margin-bottom:14px;">
+          <i class="fas fa-check-circle"></i>
+          <div>All 5 purchase invoices reconciled with GSTR-2A. ITC of ₹21,660 is fully matched and claimable.</div>
+        </div>
+        <table>
+          <thead><tr><th>Vendor</th><th>GSTIN</th><th>Invoice</th><th>Taxable</th><th>GST</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Bharat Suppliers</td><td class="td-mono" style="font-size:11px">24AABCB1234P1ZX</td><td class="td-mono">BP-2025-089</td><td>₹62,000</td><td>₹11,160</td><td><span class="pill pill-success"><i class="fas fa-check"></i> Matched</span></td></tr>
+            <tr><td>Shiva Logistics</td><td class="td-mono" style="font-size:11px">27AABCS5555Q1Z2</td><td class="td-mono">SL-2025-034</td><td>₹2,800</td><td>₹140</td><td><span class="pill pill-success"><i class="fas fa-check"></i> Matched</span></td></tr>
+            <tr><td>Vijay Hardware</td><td class="td-mono" style="font-size:11px">27AABCV9999R1Z1</td><td class="td-mono">VH-2025-056</td><td>₹9,400</td><td>₹1,692</td><td><span class="pill pill-success"><i class="fas fa-check"></i> Matched</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ════════ PAGE: ITR FILING ════════ -->
+    <div class="page" id="page-itr">
+      <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        <div><strong>ITR-4 (Sugam)</strong> is the right form for your business under presumptive taxation (Section 44AD). Due date: 31 July 2025. File via ERI partner integration.</div>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title">Filing Checklist</div>
+          <div class="itr-checklist">
+            <div class="itr-step">
+              <div class="step-num done"><i class="fas fa-check"></i></div>
+              <div class="step-body"><div class="step-title">Link Aadhaar + PAN</div><div class="step-desc">Verified via Income Tax portal</div></div>
+              <span class="pill pill-success">Done</span>
+            </div>
+            <div class="itr-step">
+              <div class="step-num done"><i class="fas fa-check"></i></div>
+              <div class="step-body"><div class="step-title">Fetch 26AS & AIS</div><div class="step-desc">TDS credits auto-fetched</div></div>
+              <span class="pill pill-success">Done</span>
+            </div>
+            <div class="itr-step">
+              <div class="step-num">3</div>
+              <div class="step-body"><div class="step-title">Review P&L Statement</div><div class="step-desc">Auto-generated from your khata data</div></div>
+              <button class="btn btn-sm btn-primary">Review</button>
+            </div>
+            <div class="itr-step">
+              <div class="step-num">4</div>
+              <div class="step-body"><div class="step-title">Verify Deductions (80C)</div><div class="step-desc">LIC, PPF, ELSS investments</div></div>
+              <button class="btn btn-sm">Add Details</button>
+            </div>
+            <div class="itr-step">
+              <div class="step-num">5</div>
+              <div class="step-body"><div class="step-title">File ITR-4 via ERI</div><div class="step-desc">Submit to Income Tax portal</div></div>
+              <button class="btn btn-sm" style="opacity:.5" disabled>Pending</button>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="card">
+            <div class="card-title">Income Summary — FY 2024-25</div>
+            <table>
+              <tbody>
+                <tr><td style="color:var(--muted);font-size:13px">Gross business turnover</td><td style="text-align:right;font-weight:600">₹28,45,000</td></tr>
+                <tr><td style="color:var(--muted);font-size:13px">Presumptive income (8% of turnover)</td><td style="text-align:right">₹2,27,600</td></tr>
+                <tr><td style="color:var(--muted);font-size:13px">Deduction u/s 80C</td><td style="text-align:right;color:var(--accent)">- ₹1,50,000</td></tr>
+                <tr><td style="color:var(--muted);font-size:13px">Taxable income</td><td style="text-align:right;font-weight:600">₹77,600</td></tr>
+                <tr><td style="color:var(--muted);font-size:13px">Income tax (old regime)</td><td style="text-align:right">₹0 (below basic exemption)</td></tr>
+                <tr><td style="color:var(--muted);font-size:13px">TDS deducted (from 26AS)</td><td style="text-align:right">₹0</td></tr>
+                <tr style="border-top:1px solid var(--border)"><td style="font-weight:600;padding-top:10px">Refund / Tax Due</td><td style="text-align:right;font-weight:700;color:var(--accent);padding-top:10px">No Tax Due ✓</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <div class="card-title">ERI Partner — Integration Status</div>
+            <div style="display:flex;align-items:center;gap:12px;font-size:13px;">
+              <div style="width:40px;height:40px;border-radius:8px;background:var(--info-lt);display:flex;align-items:center;justify-content:center;color:var(--info);font-size:18px;flex-shrink:0;"><i class="fas fa-plug"></i></div>
+              <div>
+                <div style="font-weight:600;">Income Tax ERI API</div>
+                <div style="color:var(--muted);font-size:12px;">Authorized e-Return Intermediary</div>
+              </div>
+              <span class="pill pill-success" style="margin-left:auto;">Connected</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ PAGE: REPORTS ════════ -->
+    <div class="page" id="page-reports">
+      <div class="stat-grid" style="margin-bottom:20px;">
+        <div class="stat-card"><div class="stat-label">Annual Revenue</div><div class="stat-val">₹28.4L</div><div class="stat-sub stat-up">FY 2024-25</div></div>
+        <div class="stat-card"><div class="stat-label">Net Profit</div><div class="stat-val">₹4.1L</div><div class="stat-sub stat-up">~14.4% margin</div></div>
+        <div class="stat-card"><div class="stat-label">Total GST Filed</div><div class="stat-val">₹1.8L</div><div class="stat-sub">This year</div></div>
+        <div class="stat-card"><div class="stat-label">Credit Score</div><div class="stat-val stat-up">742</div><div class="stat-sub">Loan ready ✓</div></div>
+      </div>
+      <div class="three-col" style="margin-bottom:16px;">
+        <div class="report-tile" onclick="showToast('P&L report generating...')">
+          <i class="fas fa-file-alt" style="color:var(--accent);"></i>
+          <div class="report-tile-title">P&L Statement</div>
+          <div class="report-tile-sub">Profit & loss — this FY</div>
+        </div>
+        <div class="report-tile" onclick="showToast('Balance sheet generating...')">
+          <i class="fas fa-balance-scale" style="color:var(--info);"></i>
+          <div class="report-tile-title">Balance Sheet</div>
+          <div class="report-tile-sub">Assets & liabilities</div>
+        </div>
+        <div class="report-tile" onclick="showToast('GST trend report loading...')">
+          <i class="fas fa-chart-line" style="color:var(--warn);"></i>
+          <div class="report-tile-title">GST Trend Report</div>
+          <div class="report-tile-sub">Monthly GST analysis</div>
+        </div>
+        <div class="report-tile" onclick="showToast('Customer report loading...')">
+          <i class="fas fa-users" style="color:var(--info);"></i>
+          <div class="report-tile-title">Customer Report</div>
+          <div class="report-tile-sub">Top buyers by revenue</div>
+        </div>
+        <div class="report-tile" onclick="showToast('Loan readiness report generating...')">
+          <i class="fas fa-university" style="color:var(--accent);"></i>
+          <div class="report-tile-title">Loan Readiness</div>
+          <div class="report-tile-sub">Bank-ready financials</div>
+        </div>
+        <div class="report-tile" onclick="showToast('Expense analysis loading...')">
+          <i class="fas fa-chart-pie" style="color:var(--danger);"></i>
+          <div class="report-tile-title">Expense Analysis</div>
+          <div class="report-tile-sub">Cost breakdown by category</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Monthly Revenue vs GST Trend (FY 2024-25)</div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Month</th><th>Sales</th><th>Purchases</th><th>Output GST</th><th>Input ITC</th><th>Net GST Paid</th></tr></thead>
+            <tbody>
+              <tr><td>Apr 2024</td><td>₹2,10,000</td><td>₹1,20,000</td><td>₹25,200</td><td>₹14,400</td><td style="font-weight:600">₹10,800</td></tr>
+              <tr><td>May 2024</td><td>₹2,45,000</td><td>₹1,40,000</td><td>₹29,400</td><td>₹16,800</td><td style="font-weight:600">₹12,600</td></tr>
+              <tr><td>Jun 2024</td><td>₹2,62,000</td><td>₹1,55,000</td><td>₹31,440</td><td>₹18,600</td><td style="font-weight:600">₹12,840</td></tr>
+              <tr><td>Jul 2024</td><td>₹2,84,500</td><td>₹1,62,000</td><td>₹34,140</td><td>₹21,660</td><td style="font-weight:600">₹12,480</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ PAGE: WHATSAPP UX ════════ -->
+    <div class="page" id="page-whatsapp">
+      <div class="alert alert-success">
+        <i class="fab fa-whatsapp"></i>
+        <div><strong>WhatsApp integration is active.</strong> Your WhatsApp number +91 98765 43210 is linked. Send any command below to manage your business on the go.</div>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title">WhatsApp Commands</div>
+          <table>
+            <thead><tr><th>Command</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">BILL Ramesh 5000</code></td><td style="color:var(--muted)">Create invoice for Ramesh ₹5,000</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">PAID Ramesh 3000</code></td><td style="color:var(--muted)">Record payment received</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">KHARCHA 500 Rent</code></td><td style="color:var(--muted)">Add expense ₹500 for Rent</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">REPORT</code></td><td style="color:var(--muted)">Get today's cash summary</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">GST DUE</code></td><td style="color:var(--muted)">Check GST due amount</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">REMIND Ramesh</code></td><td style="color:var(--muted)">Send payment reminder to Ramesh</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">BAKAYA</code></td><td style="color:var(--muted)">View total outstanding (udhaari)</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">STOCK 10 kapda</code></td><td style="color:var(--muted)">Add 10 units of kapda to inventory</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div class="card">
+            <div class="card-title">WhatsApp Chat Preview</div>
+            <div style="background:#E5DDD5;border-radius:8px;padding:14px;font-size:12px;min-height:280px;">
+              <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+                <div style="background:#DCF8C6;border-radius:8px 8px 0 8px;padding:8px 12px;max-width:75%;"><div>BILL Ramesh 5000</div><div style="color:#888;font-size:10px;text-align:right;margin-top:4px;">10:42 AM ✓✓</div></div>
+              </div>
+              <div style="display:flex;margin-bottom:10px;">
+                <div style="background:#fff;border-radius:8px 8px 8px 0;padding:8px 12px;max-width:80%;"><div>✅ <strong>Invoice created!</strong><br>INV-2025-048 for Ramesh Traders<br>Amount: ₹5,900 (incl. 18% GST)<br>Send to customer? Reply <strong>SEND</strong></div><div style="color:#888;font-size:10px;text-align:right;margin-top:4px;">10:42 AM</div></div>
+              </div>
+              <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+                <div style="background:#DCF8C6;border-radius:8px 8px 0 8px;padding:8px 12px;max-width:75%;"><div>SEND</div><div style="color:#888;font-size:10px;text-align:right;margin-top:4px;">10:43 AM ✓✓</div></div>
+              </div>
+              <div style="display:flex;margin-bottom:10px;">
+                <div style="background:#fff;border-radius:8px 8px 8px 0;padding:8px 12px;max-width:80%;"><div>📤 Invoice sent to Ramesh on WhatsApp! Also added to GSTR-1 queue automatically.</div><div style="color:#888;font-size:10px;text-align:right;margin-top:4px;">10:43 AM</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">Reminder Settings</div>
+            <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;">
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox" checked> GST filing reminders (5 days before due)</label>
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox" checked> Auto payment reminders to parties</label>
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox"> Daily cash summary on WhatsApp</label>
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox" checked> Invoice delivery confirmation</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ PAGE: SETTINGS ════════ -->
+    <div class="page" id="page-settings">
+      <div class="card">
+        <div class="card-title">Business Profile</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Business Name</label><input value="Sharma Cloth House" /></div>
+          <div class="form-group"><label>GSTIN</label><input value="27AABCU9603R1ZX" /></div>
+          <div class="form-group"><label>PAN Number</label><input value="AABCU9603R" /></div>
+          <div class="form-group"><label>Mobile (WhatsApp)</label><input value="+91 98765 43210" /></div>
+          <div class="form-group"><label>Business Type</label>
+            <select>
+              <option selected>Retail — Cloth/Textile</option>
+              <option>Kirana/General Store</option>
+              <option>Manufacturer</option>
+              <option>Trader/Distributor</option>
+              <option>Service Provider</option>
+            </select>
+          </div>
+          <div class="form-group"><label>GST Scheme</label>
+            <select>
+              <option selected>Regular Taxpayer</option>
+              <option>Composition Scheme (GSTR-4)</option>
+            </select>
+          </div>
+          <div class="form-group"><label>City</label><input value="Nanded, Maharashtra" /></div>
+          <div class="form-group"><label>State Code</label><input value="27 — Maharashtra" /></div>
+          <div class="form-group full"><label>Business Address</label><input value="Shop No. 14, Shivaji Market, Nanded — 431601" /></div>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="showToast('Business profile saved ✓')"><i class="fas fa-save"></i> Save Changes</button>
+          <button class="btn"><i class="fas fa-eye"></i> Preview GSTIN Card</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Subscription</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;">
+          <div>
+            <div style="font-weight:700;font-size:15px;">Pro Plan — ₹499/month</div>
+            <div style="color:var(--muted);margin-top:4px;">Next billing: 1 August 2025 • GST Filing + ITR + WhatsApp + Reports</div>
+          </div>
+          <button class="btn btn-sm btn-primary">Upgrade to Annual (₹4,499/yr)</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">GSP & ERI Integrations</div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:var(--radius);">
+            <div style="width:36px;height:36px;border-radius:8px;background:var(--accent-lt);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:16px;"><i class="fas fa-plug"></i></div>
+            <div style="flex:1"><div style="font-weight:600;font-size:13px;">Masters India GSP</div><div style="font-size:12px;color:var(--muted);">GST Suvidha Provider — GSTN filings</div></div>
+            <span class="pill pill-success">Connected</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:var(--radius);">
+            <div style="width:36px;height:36px;border-radius:8px;background:var(--info-lt);display:flex;align-items:center;justify-content:center;color:var(--info);font-size:16px;"><i class="fas fa-file-alt"></i></div>
+            <div style="flex:1"><div style="font-weight:600;font-size:13px;">ERI Partner — ITR Filing</div><div style="font-size:12px;color:var(--muted);">e-Return Intermediary for Income Tax</div></div>
+            <span class="pill pill-success">Connected</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ══════════ MODALS ══════════ -->
+
+<!-- New Invoice -->
+<div class="modal-overlay" id="new-invoice-modal">
+  <div class="modal-box">
+    <div class="modal-title"><i class="fas fa-file-invoice" style="color:var(--accent)"></i> New Tax Invoice</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Invoice Number</label><input id="inv-num" value="INV-2025-048" /></div>
+      <div class="form-group"><label>Date</label><input type="date" id="inv-date" /></div>
+      <div class="form-group"><label>Party Name</label><input id="inv-party" placeholder="Customer name" /></div>
+      <div class="form-group"><label>Party GSTIN (optional)</label><input id="inv-gstin" placeholder="29AABCX1234Y1ZK" /></div>
+      <div class="form-group"><label>Item / Service Description</label><input id="inv-item" placeholder="e.g. Cotton Fabric" /></div>
+      <div class="form-group"><label>Quantity</label><input type="number" id="inv-qty" placeholder="1" value="1" /></div>
+      <div class="form-group"><label>Rate (₹)</label><input type="number" id="inv-rate" placeholder="0" oninput="calcInvoice()" /></div>
+      <div class="form-group"><label>GST Rate</label>
+        <select id="inv-gst" onchange="calcInvoice()">
+          <option>0%</option><option>5%</option><option>12%</option><option selected>18%</option><option>28%</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Place of Supply</label>
+        <select>
+          <option selected>Maharashtra (27)</option>
+          <option>Delhi (07)</option><option>Gujarat (24)</option><option>Karnataka (29)</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:14px;padding:12px;background:var(--bg);border-radius:var(--radius);font-size:13px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span style="color:var(--muted)">Taxable Amount</span><span id="inv-taxable">—</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span style="color:var(--muted)">CGST + SGST</span><span id="inv-tax">—</span></div>
+      <div style="display:flex;justify-content:space-between;font-weight:700;border-top:1px solid var(--border);padding-top:8px;margin-top:8px;"><span>Invoice Total</span><span id="inv-total" style="color:var(--accent)">—</span></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('new-invoice-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createInvoice()"><i class="fas fa-save"></i> Create Invoice</button>
+    </div>
+  </div>
+</div>
+
+<!-- File GSTR-3B -->
+<div class="modal-overlay" id="file-gstr3b-modal">
+  <div class="modal-box">
+    <div class="modal-title"><i class="fas fa-landmark" style="color:var(--accent)"></i> File GSTR-3B — June 2025</div>
+    <div class="filing-row done"><i class="fas fa-check-circle" style="color:var(--accent)"></i> <span>Sales data auto-populated from GSTR-1</span></div>
+    <div class="filing-row done"><i class="fas fa-check-circle" style="color:var(--accent)"></i> <span>ITC reconciled from purchase entries (₹21,660)</span></div>
+    <div class="filing-row done"><i class="fas fa-check-circle" style="color:var(--accent)"></i> <span>Net tax computed: CGST ₹6,975 + SGST ₹6,975</span></div>
+    <div style="margin:16px 0;padding:14px;background:var(--warn-lt);border-radius:var(--radius);border-left:3px solid var(--warn);font-size:13px;">
+      <div style="font-weight:600;color:var(--warn);margin-bottom:6px;"><i class="fas fa-exclamation-triangle"></i> Confirm Filing</div>
+      <div style="color:var(--muted);">Net tax payable: <strong style="color:var(--text);">₹12,480</strong><br>
+      Payment via GSP → GSTN challan<br>
+      OTP verification on: +91 98765 43210</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('file-gstr3b-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="fileGSTR3B()"><i class="fas fa-paper-plane"></i> Submit via GSP</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Entry (Khata) -->
+<div class="modal-overlay" id="add-entry-modal">
+  <div class="modal-box">
+    <div class="modal-title"><i class="fas fa-book" style="color:var(--accent)"></i> Add Cash Entry</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Date</label><input type="date" /></div>
+      <div class="form-group"><label>Entry Type</label>
+        <select><option>Credit (Money In)</option><option>Debit (Money Out)</option></select>
+      </div>
+      <div class="form-group"><label>Amount (₹)</label><input type="number" placeholder="0" /></div>
+      <div class="form-group"><label>Party Name</label><input placeholder="Optional" /></div>
+      <div class="form-group full"><label>Description</label><input placeholder="What was this for?" /></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('add-entry-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="showToast('Entry added to cash book ✓');closeModal('add-entry-modal')"><i class="fas fa-save"></i> Add Entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Party -->
+<div class="modal-overlay" id="add-party-modal">
+  <div class="modal-box">
+    <div class="modal-title"><i class="fas fa-user-plus" style="color:var(--accent)"></i> Add Party</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Party Name</label><input placeholder="Name" /></div>
+      <div class="form-group"><label>Mobile Number</label><input placeholder="+91..." /></div>
+      <div class="form-group"><label>Party Type</label>
+        <select><option>Customer (they owe you)</option><option>Supplier (you owe them)</option></select>
+      </div>
+      <div class="form-group"><label>Opening Balance (₹)</label><input type="number" placeholder="0" /></div>
+      <div class="form-group"><label>GSTIN (optional)</label><input placeholder="Optional for GST invoices" /></div>
+      <div class="form-group"><label>City</label><input placeholder="City" /></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('add-party-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="showToast('Party added ✓');closeModal('add-party-modal')"><i class="fas fa-check"></i> Add Party</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Expense -->
+<div class="modal-overlay" id="add-expense-modal">
+  <div class="modal-box">
+    <div class="modal-title"><i class="fas fa-wallet" style="color:var(--accent)"></i> Add Expense</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Date</label><input type="date" /></div>
+      <div class="form-group"><label>Category</label>
+        <select><option>Purchase</option><option>Rent</option><option>Utilities</option><option>Transport</option><option>Salary</option><option>Other</option></select>
+      </div>
+      <div class="form-group"><label>Vendor / Party</label><input placeholder="Vendor name" /></div>
+      <div class="form-group"><label>Amount (₹)</label><input type="number" placeholder="0" /></div>
+      <div class="form-group"><label>GST Rate</label>
+        <select><option>0% (no GST)</option><option>5%</option><option>12%</option><option selected>18%</option><option>28%</option></select>
+      </div>
+      <div class="form-group"><label>ITC Eligible?</label>
+        <select><option>Yes — Business purchase</option><option>No — Personal / blocked credit</option></select>
+      </div>
+      <div class="form-group full"><label>Description / Notes</label><textarea placeholder="Optional notes"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('add-expense-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="showToast('Expense recorded ✓');closeModal('add-expense-modal')"><i class="fas fa-save"></i> Add Expense</button>
+    </div>
+  </div>
+</div>
+
+<!-- WhatsApp Quick Entry -->
+<div class="modal-overlay" id="wa-quick-modal">
+  <div class="modal-box">
+    <div class="modal-title"><i class="fab fa-whatsapp" style="color:#25D366"></i> WhatsApp Quick Entry</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">Type a command just like you would on WhatsApp. Examples: <code>BILL Ramesh 5000</code>, <code>PAID Mohan 2000</code>, <code>KHARCHA 500 Rent</code></div>
+    <div class="form-group full" style="margin-bottom:14px;">
+      <label>Your Command</label>
+      <input id="wa-cmd" placeholder="e.g. BILL Suresh 8000 GST18" style="font-family:monospace;font-size:14px;" />
+    </div>
+    <div id="wa-result" style="display:none;padding:12px;background:var(--accent-lt);border-radius:var(--radius);font-size:13px;color:var(--accent-dk);margin-bottom:4px;"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('wa-quick-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="processWACommand()"><i class="fab fa-whatsapp"></i> Process Command</button>
+    </div>
+  </div>
+</div>
+
+<!-- Filing Success -->
+<div class="modal-overlay" id="success-modal">
+  <div class="modal-box" style="text-align:center;padding:40px 28px;">
+    <div style="width:64px;height:64px;border-radius:50%;background:var(--accent-lt);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;"><i class="fas fa-check-circle" style="font-size:36px;color:var(--accent);"></i></div>
+    <div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px;">GSTR-3B Filed!</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">ARN: AA2707250001234</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:24px;">Tax paid: ₹12,480 • Period: Jun 2025</div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-primary" onclick="closeModal('success-modal')"><i class="fas fa-download"></i> Download Acknowledgement</button>
+      <button class="btn" onclick="closeModal('success-modal')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"><i class="fas fa-check-circle"></i> <span id="toast-msg"></span></div>
+
+<script>
+  // ── NAVIGATION ──
+  const pages = document.querySelectorAll('.page');
+  const navItems = document.querySelectorAll('.nav-item');
+  const titles = {
+    dashboard:'Dashboard', khata:'Khata Book', invoices:'Invoices',
+    expenses:'Expenses', gst:'GST Filing', itr:'ITR Filing',
+    reports:'Reports', whatsapp:'WhatsApp UX', settings:'Settings'
+  };
+
+  navItems.forEach(item => {
+    item.addEventListener('click', () => {
+      const p = item.dataset.page;
+      goPage(p);
+    });
+  });
+
+  function goPage(p) {
+    pages.forEach(pg => pg.classList.remove('active'));
+    navItems.forEach(ni => ni.classList.remove('active'));
+    const pg = document.getElementById('page-' + p);
+    if (pg) pg.classList.add('active');
+    const ni = document.querySelector('.nav-item[data-page="' + p + '"]');
+    if (ni) ni.classList.add('active');
+    document.getElementById('topbar-title').textContent = titles[p] || p;
+    window.scrollTo(0,0);
+  }
+
+  // ── MODALS ──
+  function openModal(id) { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal-overlay').forEach(m => {
+    m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+  });
+
+  // ── TOAST ──
+  function showToast(msg, duration = 3000) {
+    const t = document.getElementById('toast');
+    document.getElementById('toast-msg').textContent = msg;
+    t.style.display = 'flex';
+    setTimeout(() => { t.style.display = 'none'; }, duration);
+  }
+
+  // ── INVOICE CALCULATOR ──
+  function calcInvoice() {
+    const rate = parseFloat(document.getElementById('inv-rate').value) || 0;
+    const gstStr = document.getElementById('inv-gst').value;
+    const gstPct = parseFloat(gstStr) / 100;
+    const tax = rate * gstPct;
+    const total = rate + tax;
+    document.getElementById('inv-taxable').textContent = rate ? '₹' + rate.toLocaleString('en-IN') : '—';
+    document.getElementById('inv-tax').textContent = tax ? '₹' + tax.toLocaleString('en-IN', {maximumFractionDigits:2}) : '—';
+    document.getElementById('inv-total').textContent = total ? '₹' + total.toLocaleString('en-IN', {maximumFractionDigits:2}) : '—';
+  }
+
+  function createInvoice() {
+    const party = document.getElementById('inv-party').value.trim();
+    const rate = parseFloat(document.getElementById('inv-rate').value) || 0;
+    if (!party) { showToast('⚠ Enter party name'); return; }
+    if (!rate)  { showToast('⚠ Enter invoice amount'); return; }
+    showToast('Invoice created & added to GSTR-1 queue ✓');
+    closeModal('new-invoice-modal');
+  }
+
+  // ── GSTR-3B FILING ──
+  function fileGSTR3B() {
+    closeModal('file-gstr3b-modal');
+    setTimeout(() => openModal('success-modal'), 300);
+  }
+
+  // ── PARTY LEDGER ──
+  function loadParty(name, amount, type) {
+    const isCredit = type === 'credit';
+    document.querySelector('#party-detail-card .card-title').textContent = name + ' — Ledger';
+    const color = isCredit ? 'var(--accent-dk)' : 'var(--danger)';
+    const label = isCredit ? 'owes you' : 'you owe them';
+    document.getElementById('party-detail-content').innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <span style="font-size:15px;font-weight:700;color:${color};">${isCredit ? '+' : '-'}₹${amount.toLocaleString('en-IN')}</span>
+        <span style="font-size:12px;color:var(--muted);">(${label})</span>
+      </div>
+      <table style="font-size:12px;width:100%;">
+        <thead><tr><th>Date</th><th>Entry</th><th>Debit</th><th>Credit</th></tr></thead>
+        <tbody>
+          <tr><td>10 Jul</td><td>Payment received</td><td>—</td><td style="color:var(--accent);font-weight:600">+₹15,000</td></tr>
+          <tr><td>07 Jul</td><td>Sale invoice</td><td>—</td><td style="color:var(--accent);font-weight:600">+₹28,000</td></tr>
+          <tr><td>04 Jul</td><td>Goods return</td><td style="color:var(--danger);font-weight:600">-₹2,000</td><td>—</td></tr>
+          <tr><td>01 Jul</td><td>Opening balance</td><td>—</td><td style="color:var(--accent);font-weight:600">+₹4,200</td></tr>
+        </tbody>
+      </table>
+      <div style="display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
+        <button class="btn btn-sm btn-primary" onclick="showToast('WhatsApp reminder sent to ${name} ✓')"><i class="fab fa-whatsapp"></i> Send Reminder</button>
+        <button class="btn btn-sm" onclick="showToast('Statement downloaded ✓')"><i class="fas fa-download"></i> Statement</button>
+      </div>`;
+  }
+
+  // ── WHATSAPP COMMAND PROCESSOR ──
+  function processWACommand() {
+    const cmd = document.getElementById('wa-cmd').value.trim().toUpperCase();
+    const result = document.getElementById('wa-result');
+    result.style.display = 'block';
+    if (cmd.startsWith('BILL')) {
+      const parts = cmd.split(' ');
+      result.innerHTML = `✅ <strong>Invoice created!</strong> For ${parts[1] || 'party'} — Amount processed. Added to GSTR-1 queue automatically.`;
+    } else if (cmd.startsWith('PAID')) {
+      result.innerHTML = `✅ <strong>Payment recorded!</strong> Khata updated. Balance adjusted.`;
+    } else if (cmd.startsWith('KHARCHA')) {
+      result.innerHTML = `✅ <strong>Expense added!</strong> ITC eligibility auto-detected.`;
+    } else if (cmd === 'REPORT') {
+      result.innerHTML = `📊 <strong>Today's Summary</strong><br>Sales: ₹45,000 | Expenses: ₹8,500 | Cash: ₹48,200 | Pending: ₹59,590`;
+    } else if (cmd === 'GST DUE') {
+      result.innerHTML = `🏦 <strong>GST Due</strong><br>GSTR-3B: ₹12,480 due by 20 Jul 2025. File via KhataBill app.`;
+    } else if (cmd === 'BAKAYA') {
+      result.innerHTML = `💰 <strong>Outstanding</strong><br>To Receive: ₹87,800 | To Pay: ₹51,500 | Net: +₹36,300`;
+    } else {
+      result.innerHTML = `⚠ Command not recognized. Try: BILL, PAID, KHARCHA, REPORT, GST DUE, BAKAYA, REMIND`;
+    }
+  }
+
+  // ── SET DEFAULT DATE ──
+  document.querySelectorAll('input[type="date"]').forEach(d => {
+    if (!d.value) d.value = new Date().toISOString().split('T')[0];
+  });
+</script>
+</body>
+</html>
