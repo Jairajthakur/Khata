@@ -58,6 +58,18 @@ const WB_BASE = process.env.WHITEBOOKS_ENV === 'production'
 // ─── Fetch timeout (ms). WhiteBooks GSP can be slow; 20s is safe. ───────────
 const WB_TIMEOUT_MS = 20000;
 
+/**
+ * Safely convert a WhiteBooks API error field to a string.
+ * WhiteBooks sometimes returns { message: {...} } or { error: {...} } as objects.
+ */
+function wbStr(val) {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') return JSON.stringify(val);
+  return String(val);
+}
+
+
 // ─── Static-IP egress proxy for Railway ─────────────────────────────────────
 // Set WHITEBOOKS_PROXY_URL in Railway environment variables.
 // Example: WHITEBOOKS_PROXY_URL=http://user:pass@criterium.usefixie.com:80
@@ -166,7 +178,7 @@ async function getWBToken(clientId, clientSecret) {
   }
 
   if (!res.ok || !data.authtoken) {
-    throw new Error(data.message || data.error || `WhiteBooks auth failed (HTTP ${res.status})`);
+    throw new Error(wbStr(data.message) || wbStr(data.error) || `WhiteBooks auth failed (HTTP ${res.status})`);
   }
 
   // Cache for 55 minutes (tokens expire at 60 min)
@@ -187,7 +199,7 @@ async function parseWBResponse(res, label) {
     );
   }
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || data.error || `WhiteBooks API error: ${res.status}`);
+  if (!res.ok) throw new Error(wbStr(data.message) || wbStr(data.error) || `WhiteBooks API error: ${res.status}`);
   return data;
 }
 
