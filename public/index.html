@@ -1266,10 +1266,35 @@
   ════════════════════════════════════════════ */
   async function apiFetch(path, opts = {}) {
     const token = getToken();
-    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+    const headers = Object.assign({
+      'Content-Type': 'application/json',
+      // Prevent browser from sending If-None-Match / If-Modified-Since so the
+      // server (or Railway's proxy) never short-circuits with a bodyless 304.
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+    }, opts.headers || {});
     if (token) headers['Authorization'] = 'Bearer ' + token;
 
-    const res = await fetch('/api' + path, Object.assign({}, opts, { headers }));
+    const res = await fetch('/api' + path, Object.assign({}, opts, {
+      headers,
+      cache: 'no-store', // tells the browser Fetch API to bypass its HTTP cache entirely
+    }));
+
+    // 304 means "not modified" — no body is sent. The browser should have
+    // served a cached copy, but since we use cache:'no-store' above this
+    // path should be unreachable. Guard anyway: treat 304 like a fresh 200
+    // by re-fetching once without any conditional headers.
+    if (res.status === 304) {
+      const retry = await fetch('/api' + path, Object.assign({}, opts, {
+        headers: Object.assign({}, headers, { 'If-None-Match': '', 'If-Modified-Since': '' }),
+        cache: 'reload',
+      }));
+      let retryBody = null;
+      try { retryBody = await retry.json(); } catch (e) { /* no body */ }
+      if (!retry.ok) throw new Error((retryBody && retryBody.error) || ('Request failed (' + retry.status + ')'));
+      return retryBody;
+    }
+
     let body = null;
     try { body = await res.json(); } catch (e) { /* no body */ }
 
