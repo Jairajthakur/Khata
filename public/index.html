@@ -1268,32 +1268,22 @@
     const token = getToken();
     const headers = Object.assign({
       'Content-Type': 'application/json',
-      // Prevent browser from sending If-None-Match / If-Modified-Since so the
-      // server (or Railway's proxy) never short-circuits with a bodyless 304.
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
+      'Expires': '0',
     }, opts.headers || {});
     if (token) headers['Authorization'] = 'Bearer ' + token;
 
-    const res = await fetch('/api' + path, Object.assign({}, opts, {
-      headers,
-      cache: 'no-store', // tells the browser Fetch API to bypass its HTTP cache entirely
-    }));
+    // Append a unique timestamp query param to bust Railway's proxy ETag/304 caching.
+    // Railway's CDN layer returns 304 even when cache:'no-store' is set, so we
+    // must make every URL unique so the proxy treats it as a brand-new request.
+    const sep = path.includes('?') ? '&' : '?';
+    const bustPath = '/api' + path + sep + '_t=' + Date.now();
 
-    // 304 means "not modified" — no body is sent. The browser should have
-    // served a cached copy, but since we use cache:'no-store' above this
-    // path should be unreachable. Guard anyway: treat 304 like a fresh 200
-    // by re-fetching once without any conditional headers.
-    if (res.status === 304) {
-      const retry = await fetch('/api' + path, Object.assign({}, opts, {
-        headers: Object.assign({}, headers, { 'If-None-Match': '', 'If-Modified-Since': '' }),
-        cache: 'reload',
-      }));
-      let retryBody = null;
-      try { retryBody = await retry.json(); } catch (e) { /* no body */ }
-      if (!retry.ok) throw new Error((retryBody && retryBody.error) || ('Request failed (' + retry.status + ')'));
-      return retryBody;
-    }
+    const res = await fetch(bustPath, Object.assign({}, opts, {
+      headers,
+      cache: 'no-store',
+    }));
 
     let body = null;
     try { body = await res.json(); } catch (e) { /* no body */ }
