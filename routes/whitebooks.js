@@ -48,7 +48,10 @@ const { ok } = require('../middleware/errorHandler');
 const { query } = require('../config/db');
 const { computeGSTR3B } = require('../utils/gstCalculator');
 
-const WB_BASE = 'https://gsp.whitebooks.in';
+// Use sandbox URL for testing; switch to https://gsp.whitebooks.in for production
+const WB_BASE = process.env.NODE_ENV === 'production' && process.env.WHITEBOOKS_ENV === 'production'
+  ? 'https://gsp.whitebooks.in'
+  : 'https://apisandbox.whitebooks.in';
 
 // ─── Fetch timeout (ms). WhiteBooks GSP can be slow; 20s is safe. ───────────
 const WB_TIMEOUT_MS = 20000;
