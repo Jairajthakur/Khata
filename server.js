@@ -17,6 +17,7 @@ const itrRoutes = require('./routes/itr');
 const dashboardRoutes = require('./routes/dashboard');
 const whatsappRoutes = require('./routes/whatsapp');
 const khataRoutes = require('./routes/khata');
+const whitebooksRoutes = require('./routes/whitebooks');
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use('/api/itr', itrRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/khata', khataRoutes);
+app.use('/api/wb', whitebooksRoutes);
 
 // Serve the static demo frontend
 app.use(express.static(path.join(__dirname, 'public')));
