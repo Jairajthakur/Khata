@@ -19,37 +19,74 @@ async function getWBToken(clientId, clientSecret) {
   if (tokenCache[key] && tokenCache[key].expiry > Date.now()) {
     return tokenCache[key].token;
   }
-  const res = await fetch(`${WB_BASE}/api/authenticate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientid: clientId, clientsecret: clientSecret }),
-  });
-  const data = await res.json();
+  let res;
+  try {
+    res = await fetch(`${WB_BASE}/api/authenticate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientid: clientId, clientsecret: clientSecret }),
+    });
+  } catch (fetchErr) {
+    throw new Error(`Cannot reach WhiteBooks API: ${fetchErr.message}`);
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  let data;
+  if (contentType.includes('application/json')) {
+    data = await res.json();
+  } else {
+    const text = await res.text();
+    throw new Error(
+      `WhiteBooks API returned unexpected response (HTTP ${res.status}). ` +
+      `Check your Client ID and Secret. Server said: ${text.slice(0, 120).replace(/<[^>]*>/g, '').trim()}`
+    );
+  }
+
   if (!res.ok || !data.authtoken) {
-    throw new Error(data.message || 'WhiteBooks auth failed');
+    throw new Error(data.message || data.error || `WhiteBooks auth failed (HTTP ${res.status})`);
   }
   tokenCache[key] = { token: data.authtoken, expiry: Date.now() + 55 * 60 * 1000 }; // 55 min
   return data.authtoken;
 }
 
-async function wbGet(path, token, clientId) {
-  const res = await fetch(`${WB_BASE}${path}`, {
-    headers: { authtoken: token, clientid: clientId, 'Content-Type': 'application/json' },
-  });
+async function parseWBResponse(res, label) {
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await res.text();
+    throw new Error(
+      `WhiteBooks ${label} returned non-JSON (HTTP ${res.status}): ` +
+      text.slice(0, 120).replace(/<[^>]*>/g, '').trim()
+    );
+  }
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || `WhiteBooks API error: ${res.status}`);
+  if (!res.ok) throw new Error(data.message || data.error || `WhiteBooks API error: ${res.status}`);
   return data;
 }
 
+async function wbGet(path, token, clientId) {
+  let res;
+  try {
+    res = await fetch(`${WB_BASE}${path}`, {
+      headers: { authtoken: token, clientid: clientId, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    throw new Error(`Cannot reach WhiteBooks API: ${err.message}`);
+  }
+  return parseWBResponse(res, `GET ${path}`);
+}
+
 async function wbPost(path, body, token, clientId) {
-  const res = await fetch(`${WB_BASE}${path}`, {
-    method: 'POST',
-    headers: { authtoken: token, clientid: clientId, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message || `WhiteBooks API error: ${res.status}`);
-  return data;
+  let res;
+  try {
+    res = await fetch(`${WB_BASE}${path}`, {
+      method: 'POST',
+      headers: { authtoken: token, clientid: clientId, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    throw new Error(`Cannot reach WhiteBooks API: ${err.message}`);
+  }
+  return parseWBResponse(res, `POST ${path}`);
 }
 
 router.use(authenticate, requireBusiness);
