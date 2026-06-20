@@ -947,14 +947,14 @@
           <table>
             <thead><tr><th>Command</th><th>Action</th></tr></thead>
             <tbody>
-              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">BILL Ramesh 5000</code></td><td style="color:var(--muted)">Create invoice for Ramesh ₹5,000</td></tr>
-              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">PAID Ramesh 3000</code></td><td style="color:var(--muted)">Record payment received</td></tr>
-              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">KHARCHA 500 Rent</code></td><td style="color:var(--muted)">Add expense ₹500 for Rent</td></tr>
-              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">REPORT</code></td><td style="color:var(--muted)">Get today's cash summary</td></tr>
-              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">GST DUE</code></td><td style="color:var(--muted)">Check GST due amount</td></tr>
-              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">REMIND Ramesh</code></td><td style="color:var(--muted)">Send payment reminder to Ramesh</td></tr>
-              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">BAKAYA</code></td><td style="color:var(--muted)">View total outstanding (udhaari)</td></tr>
-              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;">STOCK 10 kapda</code></td><td style="color:var(--muted)">Add 10 units of kapda to inventory</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;cursor:pointer;" onclick="quickTryWA('BILL Ramesh 5000')">BILL Ramesh 5000</code></td><td style="color:var(--muted)">Create invoice for Ramesh ₹5,000</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;cursor:pointer;" onclick="quickTryWA('PAID Ramesh 3000')">PAID Ramesh 3000</code></td><td style="color:var(--muted)">Record payment received</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;cursor:pointer;" onclick="quickTryWA('KHARCHA 500 Rent')">KHARCHA 500 Rent</code></td><td style="color:var(--muted)">Add expense ₹500 for Rent</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;cursor:pointer;" onclick="quickTryWA('REPORT')">REPORT</code></td><td style="color:var(--muted)">Get today's cash summary</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;cursor:pointer;" onclick="quickTryWA('GST DUE')">GST DUE</code></td><td style="color:var(--muted)">Check GST due amount</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;cursor:pointer;" onclick="quickTryWA('REMIND Ramesh')">REMIND Ramesh</code></td><td style="color:var(--muted)">Send payment reminder to Ramesh</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;cursor:pointer;" onclick="quickTryWA('BAKAYA')">BAKAYA</code></td><td style="color:var(--muted)">View total outstanding (udhaari)</td></tr>
+              <tr><td><code style="background:var(--bg);padding:3px 6px;border-radius:4px;font-size:12px;cursor:pointer;" onclick="quickTryWA('STOCK 10 kapda')">STOCK 10 kapda</code></td><td style="color:var(--muted)">Add 10 units of kapda to inventory</td></tr>
             </tbody>
           </table>
         </div>
@@ -1223,20 +1223,79 @@
 </div><!-- /#app-root -->
 
 <script>
-  // ── NAVIGATION ──
+  /* ════════════════════════════════════════════
+     CONFIG + STATE
+  ════════════════════════════════════════════ */
+  const TOKEN_KEY = 'khatabill_token';
+  let currentUser = null;
+  let currentBusiness = null;
+  let currentDraftReturnId = null;
+
+  const getToken   = () => localStorage.getItem(TOKEN_KEY);
+  const setToken    = (t) => localStorage.setItem(TOKEN_KEY, t);
+  const clearToken  = () => localStorage.removeItem(TOKEN_KEY);
+
+  function inr(n) {
+    n = parseFloat(n);
+    if (isNaN(n)) n = 0;
+    return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+  }
+  function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s === null || s === undefined ? '' : String(s);
+    return d.innerHTML;
+  }
+  function fmtDate(d) {
+    if (!d) return '—';
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return '—';
+    return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  }
+  function fmtDateTime(d) {
+    if (!d) return '';
+    const dt = new Date(d);
+    return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ', ' +
+           dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  }
+  function periodStr(date = new Date()) {
+    return String(date.getMonth() + 1).padStart(2, '0') + '-' + date.getFullYear();
+  }
+
+  /* ════════════════════════════════════════════
+     API CLIENT
+  ════════════════════════════════════════════ */
+  async function apiFetch(path, opts = {}) {
+    const token = getToken();
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
+    const res = await fetch('/api' + path, Object.assign({}, opts, { headers }));
+    let body = null;
+    try { body = await res.json(); } catch (e) { /* no body */ }
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        clearToken();
+        showAuthScreen('login');
+      }
+      throw new Error((body && body.error) || ('Request failed (' + res.status + ')'));
+    }
+    return body;
+  }
+
+  /* ════════════════════════════════════════════
+     NAVIGATION
+  ════════════════════════════════════════════ */
   const pages = document.querySelectorAll('.page');
   const navItems = document.querySelectorAll('.nav-item');
   const titles = {
-    dashboard:'Dashboard', khata:'Khata Book', invoices:'Invoices',
-    expenses:'Expenses', gst:'GST Filing', itr:'ITR Filing',
-    reports:'Reports', whatsapp:'WhatsApp UX', settings:'Settings'
+    dashboard: 'Dashboard', khata: 'Khata Book', invoices: 'Invoices',
+    expenses: 'Expenses', gst: 'GST Filing', itr: 'ITR Filing',
+    reports: 'Reports', whatsapp: 'WhatsApp UX', settings: 'Settings'
   };
 
   navItems.forEach(item => {
-    item.addEventListener('click', () => {
-      const p = item.dataset.page;
-      goPage(p);
-    });
+    item.addEventListener('click', () => goPage(item.dataset.page));
   });
 
   function goPage(p) {
@@ -1247,104 +1306,812 @@
     const ni = document.querySelector('.nav-item[data-page="' + p + '"]');
     if (ni) ni.classList.add('active');
     document.getElementById('topbar-title').textContent = titles[p] || p;
-    window.scrollTo(0,0);
+    window.scrollTo(0, 0);
+    loadPageData(p);
   }
 
-  // ── MODALS ──
+  function loadPageData(p) {
+    if (!currentBusiness) return;
+    if (p === 'dashboard') loadDashboard();
+    else if (p === 'khata') loadKhata();
+    else if (p === 'invoices') loadInvoices();
+    else if (p === 'expenses') loadExpenses();
+    else if (p === 'gst') loadGST();
+    else if (p === 'settings') loadSettings();
+  }
+
+  /* ════════════════════════════════════════════
+     MODALS + TOAST
+  ════════════════════════════════════════════ */
   function openModal(id) { document.getElementById(id).classList.add('open'); }
   function closeModal(id) { document.getElementById(id).classList.remove('open'); }
   document.querySelectorAll('.modal-overlay').forEach(m => {
     m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
   });
 
-  // ── TOAST ──
-  function showToast(msg, duration = 3000) {
+  let toastTimer = null;
+  function showToast(msg, isError = false, duration = 3500) {
     const t = document.getElementById('toast');
     document.getElementById('toast-msg').textContent = msg;
+    t.classList.toggle('error', !!isError);
     t.style.display = 'flex';
-    setTimeout(() => { t.style.display = 'none'; }, duration);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.style.display = 'none'; }, duration);
   }
 
-  // ── INVOICE CALCULATOR ──
-  function calcInvoice() {
-    const rate = parseFloat(document.getElementById('inv-rate').value) || 0;
-    const gstStr = document.getElementById('inv-gst').value;
-    const gstPct = parseFloat(gstStr) / 100;
-    const tax = rate * gstPct;
-    const total = rate + tax;
-    document.getElementById('inv-taxable').textContent = rate ? '₹' + rate.toLocaleString('en-IN') : '—';
-    document.getElementById('inv-tax').textContent = tax ? '₹' + tax.toLocaleString('en-IN', {maximumFractionDigits:2}) : '—';
-    document.getElementById('inv-total').textContent = total ? '₹' + total.toLocaleString('en-IN', {maximumFractionDigits:2}) : '—';
-  }
-
-  function createInvoice() {
-    const party = document.getElementById('inv-party').value.trim();
-    const rate = parseFloat(document.getElementById('inv-rate').value) || 0;
-    if (!party) { showToast('⚠ Enter party name'); return; }
-    if (!rate)  { showToast('⚠ Enter invoice amount'); return; }
-    showToast('Invoice created & added to GSTR-1 queue ✓');
-    closeModal('new-invoice-modal');
-  }
-
-  // ── GSTR-3B FILING ──
-  function fileGSTR3B() {
-    closeModal('file-gstr3b-modal');
-    setTimeout(() => openModal('success-modal'), 300);
-  }
-
-  // ── PARTY LEDGER ──
-  function loadParty(name, amount, type) {
-    const isCredit = type === 'credit';
-    document.querySelector('#party-detail-card .card-title').textContent = name + ' — Ledger';
-    const color = isCredit ? 'var(--accent-dk)' : 'var(--danger)';
-    const label = isCredit ? 'owes you' : 'you owe them';
-    document.getElementById('party-detail-content').innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <span style="font-size:15px;font-weight:700;color:${color};">${isCredit ? '+' : '-'}₹${amount.toLocaleString('en-IN')}</span>
-        <span style="font-size:12px;color:var(--muted);">(${label})</span>
-      </div>
-      <table style="font-size:12px;width:100%;">
-        <thead><tr><th>Date</th><th>Entry</th><th>Debit</th><th>Credit</th></tr></thead>
-        <tbody>
-          <tr><td>10 Jul</td><td>Payment received</td><td>—</td><td style="color:var(--accent);font-weight:600">+₹15,000</td></tr>
-          <tr><td>07 Jul</td><td>Sale invoice</td><td>—</td><td style="color:var(--accent);font-weight:600">+₹28,000</td></tr>
-          <tr><td>04 Jul</td><td>Goods return</td><td style="color:var(--danger);font-weight:600">-₹2,000</td><td>—</td></tr>
-          <tr><td>01 Jul</td><td>Opening balance</td><td>—</td><td style="color:var(--accent);font-weight:600">+₹4,200</td></tr>
-        </tbody>
-      </table>
-      <div style="display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
-        <button class="btn btn-sm btn-primary" onclick="showToast('WhatsApp reminder sent to ${name} ✓')"><i class="fab fa-whatsapp"></i> Send Reminder</button>
-        <button class="btn btn-sm" onclick="showToast('Statement downloaded ✓')"><i class="fas fa-download"></i> Statement</button>
-      </div>`;
-  }
-
-  // ── WHATSAPP COMMAND PROCESSOR ──
-  function processWACommand() {
-    const cmd = document.getElementById('wa-cmd').value.trim().toUpperCase();
-    const result = document.getElementById('wa-result');
-    result.style.display = 'block';
-    if (cmd.startsWith('BILL')) {
-      const parts = cmd.split(' ');
-      result.innerHTML = `✅ <strong>Invoice created!</strong> For ${parts[1] || 'party'} — Amount processed. Added to GSTR-1 queue automatically.`;
-    } else if (cmd.startsWith('PAID')) {
-      result.innerHTML = `✅ <strong>Payment recorded!</strong> Khata updated. Balance adjusted.`;
-    } else if (cmd.startsWith('KHARCHA')) {
-      result.innerHTML = `✅ <strong>Expense added!</strong> ITC eligibility auto-detected.`;
-    } else if (cmd === 'REPORT') {
-      result.innerHTML = `📊 <strong>Today's Summary</strong><br>Sales: ₹45,000 | Expenses: ₹8,500 | Cash: ₹48,200 | Pending: ₹59,590`;
-    } else if (cmd === 'GST DUE') {
-      result.innerHTML = `🏦 <strong>GST Due</strong><br>GSTR-3B: ₹12,480 due by 20 Jul 2025. File via KhataBill app.`;
-    } else if (cmd === 'BAKAYA') {
-      result.innerHTML = `💰 <strong>Outstanding</strong><br>To Receive: ₹87,800 | To Pay: ₹51,500 | Net: +₹36,300`;
+  /* ════════════════════════════════════════════
+     AUTH
+  ════════════════════════════════════════════ */
+  function showAuthStep(step) {
+    document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+    document.getElementById('auth-form-' + step).classList.add('active');
+    const tabs = document.querySelector('.auth-tabs');
+    if (step === 'business') {
+      tabs.style.display = 'none';
     } else {
-      result.innerHTML = `⚠ Command not recognized. Try: BILL, PAID, KHARCHA, REPORT, GST DUE, BAKAYA, REMIND`;
+      tabs.style.display = 'flex';
+      document.getElementById('auth-tab-login').classList.toggle('active', step === 'login');
+      document.getElementById('auth-tab-register').classList.toggle('active', step === 'register');
+    }
+  }
+  function switchAuthTab(step) { showAuthStep(step); }
+
+  function showAuthScreen(step = 'login') {
+    document.getElementById('app-root').classList.add('hidden');
+    document.getElementById('auth-screen').classList.remove('hidden');
+    showAuthStep(step);
+  }
+  function showApp() {
+    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('app-root').classList.remove('hidden');
+  }
+
+  async function checkAuth() {
+    const token = getToken();
+    if (!token) { showAuthScreen('login'); return; }
+    try {
+      const res = await apiFetch('/auth/me');
+      currentUser = res.data.user;
+      currentBusiness = res.data.business;
+      if (!currentBusiness) { showAuthScreen('business'); }
+      else { showApp(); initApp(); }
+    } catch (e) { showAuthScreen('login'); }
+  }
+
+  async function doLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    errEl.classList.remove('show');
+    if (!email || !password) { errEl.textContent = 'Enter email and password'; errEl.classList.add('show'); return; }
+
+    const btn = document.getElementById('login-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner spin"></i> Logging in…';
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'Login failed');
+      setToken(body.data.token);
+      currentUser = body.data.user;
+      currentBusiness = body.data.business;
+      if (!currentBusiness) { showAuthStep('business'); }
+      else { showApp(); initApp(); }
+    } catch (e) {
+      errEl.textContent = e.message; errEl.classList.add('show');
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Log In';
     }
   }
 
-  // ── SET DEFAULT DATE ──
-  document.querySelectorAll('input[type="date"]').forEach(d => {
-    if (!d.value) d.value = new Date().toISOString().split('T')[0];
+  async function doRegister() {
+    const name = document.getElementById('reg-name').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const mobile = document.getElementById('reg-mobile').value.trim();
+    const password = document.getElementById('reg-password').value;
+    const errEl = document.getElementById('register-error');
+    errEl.classList.remove('show');
+    if (!name || !email || !password) { errEl.textContent = 'Name, email and password are required'; errEl.classList.add('show'); return; }
+
+    const btn = document.getElementById('register-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner spin"></i> Creating…';
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password, mobile })
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'Registration failed');
+      setToken(body.data.token);
+      currentUser = body.data.user;
+      currentBusiness = null;
+      showAuthStep('business');
+    } catch (e) {
+      errEl.textContent = e.message; errEl.classList.add('show');
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-user-plus"></i> Create Account';
+    }
+  }
+
+  async function doSetupBusiness() {
+    const name = document.getElementById('biz-name').value.trim();
+    const errEl = document.getElementById('business-error');
+    errEl.classList.remove('show');
+    if (!name) { errEl.textContent = 'Business name is required'; errEl.classList.add('show'); return; }
+
+    const btn = document.getElementById('business-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner spin"></i> Setting up…';
+    try {
+      const res = await apiFetch('/auth/setup-business', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          gstin: document.getElementById('biz-gstin').value.trim() || null,
+          state_code: document.getElementById('biz-state-code').value.trim() || '27',
+          state_name: document.getElementById('biz-state-name').value.trim() || 'Maharashtra',
+          city: document.getElementById('biz-city').value.trim() || null,
+        })
+      });
+      currentBusiness = res.data;
+      showApp();
+      initApp();
+    } catch (e) {
+      errEl.textContent = e.message; errEl.classList.add('show');
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Finish Setup';
+    }
+  }
+
+  function doLogout() {
+    clearToken();
+    currentUser = null; currentBusiness = null;
+    document.getElementById('login-email').value = '';
+    document.getElementById('login-password').value = '';
+    showAuthScreen('login');
+  }
+
+  function initApp() {
+    document.getElementById('sb-business-name').textContent = currentBusiness.name || 'My Business';
+    document.getElementById('gstin-badge-text').textContent = currentBusiness.gstin ? 'GSTIN Verified' : 'GSTIN Not Set';
+    document.getElementById('gstin-badge').style.opacity = currentBusiness.gstin ? '1' : '0.55';
+    document.querySelectorAll('input[type="date"]').forEach(d => {
+      if (!d.value) d.value = new Date().toISOString().split('T')[0];
+    });
+    goPage('dashboard');
+  }
+
+  /* ════════════════════════════════════════════
+     DASHBOARD
+  ════════════════════════════════════════════ */
+  function activityIcon(action) {
+    if (action === 'invoice_created') return { cls: 'ai-green', icon: 'fa-file-invoice' };
+    if (action === 'expense_created') return { cls: 'ai-red', icon: 'fa-shopping-cart' };
+    if (action === 'party_created') return { cls: 'ai-blue', icon: 'fa-user-plus' };
+    if (action === 'khata_entry_created') return { cls: 'ai-amber', icon: 'fa-rupee-sign' };
+    return { cls: 'ai-blue', icon: 'fa-check-circle' };
+  }
+
+  function filingRow(type, period, ret) {
+    let statusHtml, dueText;
+    if (!ret) { statusHtml = '<span class="pill pill-neutral">Upcoming</span>'; dueText = '—'; }
+    else if (ret.status === 'filed') { statusHtml = '<span class="pill pill-success"><i class="fas fa-check"></i> Filed</span>'; dueText = fmtDate(ret.due_date); }
+    else { statusHtml = '<span class="pill pill-warn"><i class="fas fa-clock"></i> Due</span>'; dueText = fmtDate(ret.due_date); }
+    return '<tr><td><strong>' + type + '</strong></td><td>' + period + '</td><td>' + dueText + '</td><td>' + statusHtml + '</td></tr>';
+  }
+
+  async function loadDashboard() {
+    try {
+      const now = new Date();
+      const month = now.getMonth() + 1, year = now.getFullYear();
+
+      const [invStatsRes, expStatsRes, dueRes, invListRes, actRes, returnsRes] = await Promise.all([
+        apiFetch('/invoices/stats?month=' + month + '&year=' + year),
+        apiFetch('/expenses/stats?month=' + month + '&year=' + year),
+        apiFetch('/gst/due'),
+        apiFetch('/invoices?limit=5'),
+        apiFetch('/dashboard/recent-activity?limit=8'),
+        apiFetch('/gst/returns'),
+      ]);
+
+      const stats = invStatsRes.data || {};
+      const sales = parseFloat(stats.total_amount) || 0;
+      document.getElementById('dash-sales').textContent = inr(sales);
+      document.getElementById('dash-sales').classList.remove('skel');
+      document.getElementById('dash-sales-sub').textContent = (parseInt(stats.total) || 0) + ' invoice(s) this month';
+
+      const outputGst = (parseFloat(stats.total_cgst) || 0) + (parseFloat(stats.total_sgst) || 0) + (parseFloat(stats.total_igst) || 0);
+      document.getElementById('dash-gst-output').textContent = inr(outputGst);
+      document.getElementById('dash-gst-output').classList.remove('skel');
+
+      const expStats = expStatsRes.data || {};
+      document.getElementById('dash-gst-itc').textContent = inr(expStats.itc_claimable || 0);
+      document.getElementById('dash-gst-itc').classList.remove('skel');
+
+      const due = dueRes.data;
+      document.getElementById('dash-gst-net').textContent = inr(due.net_payable);
+      document.getElementById('dash-gst-net').classList.remove('skel');
+      document.getElementById('dash-gst-net-sub').textContent = due.filed
+        ? ('Filed for ' + due.period) : ('Due by ' + fmtDate(due.due_date));
+
+      const alertEl = document.getElementById('dash-gst-alert');
+      const alertText = document.getElementById('dash-gst-alert-text');
+      const netPayable = parseFloat(due.net_payable) || 0;
+      if (!due.filed && netPayable > 0) {
+        alertEl.style.display = 'flex';
+        const daysLeft = Math.ceil((new Date(due.due_date) - now) / 86400000);
+        const dueLabel = daysLeft >= 0 ? ('due in ' + daysLeft + ' day' + (daysLeft === 1 ? '' : 's')) : 'overdue';
+        alertText.innerHTML = '<strong>GSTR-3B ' + dueLabel + '</strong> — ' + fmtDate(due.due_date) +
+          '. Net tax payable: ' + inr(due.net_payable) + '. File before the deadline to avoid ₹50/day late fee.';
+      } else {
+        alertEl.style.display = 'none';
+      }
+
+      const invoices = invListRes.data || [];
+      const txBody = document.getElementById('dash-recent-tx');
+      txBody.innerHTML = invoices.length ? invoices.map(inv => {
+        const gst = (parseFloat(inv.cgst_amount) || 0) + (parseFloat(inv.sgst_amount) || 0) + (parseFloat(inv.igst_amount) || 0);
+        const typeLabel = inv.invoice_type === 'sale' ? '<span class="pill pill-success">Sale</span>' : '<span class="pill pill-info">Purchase</span>';
+        return '<tr><td>' + esc(inv.party_name || '—') + '</td><td>' + typeLabel + '</td><td>' + inr(inv.total_amount) + '</td><td>' + inr(gst) + '</td></tr>';
+      }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--hint);padding:14px;">No transactions yet</td></tr>';
+
+      const returns = returnsRes.data || [];
+      const period = periodStr(now);
+      const gstr1 = returns.find(r => r.return_type === 'GSTR-1' && r.period === period);
+      const gstr3b = returns.find(r => r.return_type === 'GSTR-3B' && r.period === period) ||
+        { status: due.filed ? 'filed' : 'pending', due_date: due.due_date };
+      document.getElementById('dash-filing-calendar').innerHTML =
+        filingRow('GSTR-1', period, gstr1) + filingRow('GSTR-3B', period, gstr3b);
+
+      const unpaidRes = await apiFetch('/invoices?status=unpaid&limit=1');
+      const unpaidCount = unpaidRes.total || 0;
+      const badgeInv = document.getElementById('nav-badge-invoices');
+      badgeInv.textContent = unpaidCount;
+      badgeInv.style.display = unpaidCount > 0 ? 'inline-block' : 'none';
+      const badgeGst = document.getElementById('nav-badge-gst');
+      badgeGst.style.display = (!due.filed && netPayable > 0) ? 'inline-block' : 'none';
+
+      const activities = actRes.data || [];
+      document.getElementById('dash-recent-activity').innerHTML = activities.length ? activities.map(a => {
+        const ic = activityIcon(a.action);
+        return '<div class="activity-item"><div class="activity-icon ' + ic.cls + '"><i class="fas ' + ic.icon + '"></i></div>' +
+          '<div style="flex:1">' + esc(a.description) + '</div>' +
+          '<div style="font-size:11px;color:var(--hint)">' + fmtDateTime(a.created_at) + '</div></div>';
+      }).join('') : '<div style="color:var(--hint);text-align:center;padding:14px;">No recent activity yet</div>';
+    } catch (e) { showToast(e.message, true); }
+  }
+
+  /* ════════════════════════════════════════════
+     KHATA BOOK
+  ════════════════════════════════════════════ */
+  async function loadKhata() {
+    try {
+      const [partiesRes, summaryRes, cashRes] = await Promise.all([
+        apiFetch('/parties'),
+        apiFetch('/parties/summary'),
+        apiFetch('/khata?limit=30'),
+      ]);
+
+      const parties = partiesRes.data || [];
+      document.getElementById('khata-party-list').innerHTML = parties.length ? parties.map(p => {
+        const bal = parseFloat(p.net_balance) || 0;
+        const isCredit = bal >= 0;
+        return '<span class="party-chip ' + (isCredit ? 'credit' : 'debit') + '" onclick="loadPartyLedger(\'' + p.id + '\')">' +
+          '<i class="fas fa-arrow-' + (isCredit ? 'down' : 'up') + '"></i> ' + esc(p.name) + ' <strong>' + inr(Math.abs(bal)) + '</strong></span>';
+      }).join('') : '<div style="color:var(--hint);font-size:13px;">No parties yet — add one to get started.</div>';
+
+      const summary = summaryRes.data || {};
+      document.getElementById('khata-to-receive').textContent = inr(summary.to_receive || 0);
+      document.getElementById('khata-to-pay').textContent = inr(summary.to_pay || 0);
+
+      const entries = cashRes.data || [];
+      document.getElementById('khata-cashbook').innerHTML = entries.length ? entries.map(e => {
+        const isCredit = e.entry_type === 'credit';
+        return '<tr><td>' + fmtDate(e.entry_date) + '</td><td>' + esc(e.description || '—') + '</td><td>' + esc(e.party_name || '—') + '</td>' +
+          '<td>' + (isCredit ? '<span style="color:var(--accent);font-weight:600">+' + inr(e.amount) + '</span>' : '—') + '</td>' +
+          '<td>' + (!isCredit ? '<span style="color:var(--danger);font-weight:600">-' + inr(e.amount) + '</span>' : '—') + '</td>' +
+          '<td style="font-weight:600">' + inr(e.balance_after) + '</td></tr>';
+      }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--hint);padding:14px;">No cash entries yet</td></tr>';
+    } catch (e) { showToast(e.message, true); }
+  }
+
+  async function loadPartyLedger(id) {
+    try {
+      const res = await apiFetch('/parties/' + id + '/ledger');
+      const { party, entries } = res.data;
+      document.getElementById('party-detail-title').textContent = party.name + ' — Ledger';
+
+      let bal = parseFloat(party.opening_balance || 0);
+      entries.forEach(e => { bal += e.entry_type === 'credit' ? parseFloat(e.amount) : -parseFloat(e.amount); });
+      const isCredit = bal >= 0;
+
+      const rowsHtml = entries.slice(0, 10).map(e => {
+        const isC = e.entry_type === 'credit';
+        return '<tr><td>' + fmtDate(e.entry_date) + '</td><td>' + esc(e.description || '—') + '</td>' +
+          '<td>' + (!isC ? '<span style="color:var(--danger);font-weight:600">-' + inr(e.amount) + '</span>' : '—') + '</td>' +
+          '<td>' + (isC ? '<span style="color:var(--accent);font-weight:600">+' + inr(e.amount) + '</span>' : '—') + '</td></tr>';
+      }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--hint);">No entries yet</td></tr>';
+
+      document.getElementById('party-detail-content').innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+        '<span style="font-size:15px;font-weight:700;color:' + (isCredit ? 'var(--accent-dk)' : 'var(--danger)') + ';">' +
+        (isCredit ? '+' : '-') + inr(Math.abs(bal)) + '</span>' +
+        '<span style="font-size:12px;color:var(--muted);">(' + (isCredit ? 'owes you' : 'you owe them') + ')</span></div>' +
+        '<table style="font-size:12px;width:100%;"><thead><tr><th>Date</th><th>Entry</th><th>Debit</th><th>Credit</th></tr></thead>' +
+        '<tbody>' + rowsHtml + '</tbody></table>' +
+        '<div style="display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">' +
+        '<button class="btn btn-sm btn-primary" onclick="showToast(\'WhatsApp reminder sent to ' + esc(party.name) + ' ✓\')"><i class="fab fa-whatsapp"></i> Send Reminder</button>' +
+        '<button class="btn btn-sm" onclick="showToast(\'Statement downloaded ✓\')"><i class="fas fa-download"></i> Statement</button></div>';
+    } catch (e) { showToast(e.message, true); }
+  }
+
+  async function addParty() {
+    const errEl = document.getElementById('party-error'); errEl.classList.remove('show');
+    const name = document.getElementById('party-name').value.trim();
+    if (!name) { errEl.textContent = 'Enter party name'; errEl.classList.add('show'); return; }
+
+    const btn = document.getElementById('party-save-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner spin"></i> Saving…';
+    try {
+      await apiFetch('/parties', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          mobile: document.getElementById('party-mobile').value.trim() || null,
+          party_type: document.getElementById('party-type').value,
+          opening_balance: parseFloat(document.getElementById('party-opening').value) || 0,
+          gstin: document.getElementById('party-gstin').value.trim() || null,
+          city: document.getElementById('party-city').value.trim() || null,
+        })
+      });
+      showToast('Party added ✓');
+      closeModal('add-party-modal');
+      ['party-name', 'party-mobile', 'party-opening', 'party-gstin', 'party-city'].forEach(id => document.getElementById(id).value = '');
+      loadKhata();
+    } catch (e) {
+      errEl.textContent = e.message; errEl.classList.add('show');
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Add Party';
+    }
+  }
+
+  async function addCashEntry() {
+    const errEl = document.getElementById('entry-error'); errEl.classList.remove('show');
+    const amount = parseFloat(document.getElementById('entry-amount').value) || 0;
+    const date = document.getElementById('entry-date').value || new Date().toISOString().split('T')[0];
+    if (!amount) { errEl.textContent = 'Enter an amount'; errEl.classList.add('show'); return; }
+
+    const btn = document.getElementById('entry-save-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner spin"></i> Saving…';
+    try {
+      await apiFetch('/khata', {
+        method: 'POST',
+        body: JSON.stringify({
+          entry_date: date,
+          entry_type: document.getElementById('entry-type').value,
+          amount,
+          description: document.getElementById('entry-desc').value.trim() || null,
+          party_name: document.getElementById('entry-party').value.trim() || null,
+        })
+      });
+      showToast('Entry added to cash book ✓');
+      closeModal('add-entry-modal');
+      ['entry-amount', 'entry-desc', 'entry-party'].forEach(id => document.getElementById(id).value = '');
+      loadKhata();
+    } catch (e) {
+      errEl.textContent = e.message; errEl.classList.add('show');
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Add Entry';
+    }
+  }
+
+  /* ════════════════════════════════════════════
+     INVOICES
+  ════════════════════════════════════════════ */
+  function invoiceStatusPill(status) {
+    if (status === 'paid') return '<span class="pill pill-success"><i class="fas fa-check"></i> Paid</span>';
+    if (status === 'overdue') return '<span class="pill pill-danger">Overdue</span>';
+    if (status === 'partial') return '<span class="pill pill-warn">Partial</span>';
+    if (status === 'cancelled') return '<span class="pill pill-neutral">Cancelled</span>';
+    return '<span class="pill pill-warn">Unpaid</span>';
+  }
+
+  async function loadInvoices() {
+    try {
+      const status = document.getElementById('inv-filter-status').value;
+      const now = new Date();
+      const [listRes, statsRes] = await Promise.all([
+        apiFetch('/invoices' + (status ? ('?status=' + status + '&limit=50') : '?limit=50')),
+        apiFetch('/invoices/stats?month=' + (now.getMonth() + 1) + '&year=' + now.getFullYear()),
+      ]);
+      const invoices = listRes.data || [];
+      const stats = statsRes.data || {};
+
+      document.getElementById('inv-stat-total').textContent = stats.total || 0;
+      document.getElementById('inv-stat-total').classList.remove('skel');
+      document.getElementById('inv-stat-pending').textContent = inr(stats.pending || 0);
+      document.getElementById('inv-stat-pending').classList.remove('skel');
+      document.getElementById('inv-stat-collected').textContent = inr(stats.collected || 0);
+      document.getElementById('inv-stat-collected').classList.remove('skel');
+
+      const tbody = document.getElementById('invoices-tbody');
+      tbody.innerHTML = invoices.length ? invoices.map(inv => {
+        const actions = inv.status === 'paid'
+          ? '<button class="btn btn-sm btn-icon" title="Download" onclick="showToast(\'PDF export coming soon\')"><i class="fas fa-download"></i></button>'
+          : '<div style="display:flex;gap:4px;"><button class="btn btn-sm btn-icon" title="Mark Paid" onclick="markInvoicePaid(\'' + inv.id + '\')"><i class="fas fa-check"></i></button>' +
+            '<button class="btn btn-sm btn-icon" title="WhatsApp reminder" onclick="showToast(\'WhatsApp reminder sent to ' + esc(inv.party_name || 'party') + ' ✓\')"><i class="fab fa-whatsapp"></i></button></div>';
+        return '<tr><td class="td-mono">' + esc(inv.invoice_number) + '</td><td>' + fmtDate(inv.invoice_date) + '</td><td>' + esc(inv.party_name || '—') + '</td>' +
+          '<td class="td-mono" style="font-size:11px">' + esc(inv.party_gstin || '—') + '</td>' +
+          '<td>' + inr(inv.taxable_amount) + '</td><td>' + inr(inv.cgst_amount) + '</td><td>' + inr(inv.sgst_amount) + '</td>' +
+          '<td><strong>' + inr(inv.total_amount) + '</strong></td><td>' + invoiceStatusPill(inv.status) + '</td><td>' + actions + '</td></tr>';
+      }).join('') : '<tr><td colspan="10" style="text-align:center;color:var(--hint);padding:14px;">No invoices found</td></tr>';
+    } catch (e) { showToast(e.message, true); }
+  }
+
+  async function markInvoicePaid(id) {
+    try {
+      await apiFetch('/invoices/' + id + '/status', { method: 'PATCH', body: JSON.stringify({ status: 'paid' }) });
+      showToast('Invoice marked as paid ✓');
+      loadInvoices();
+    } catch (e) { showToast(e.message, true); }
+  }
+
+  async function resolvePartyByName(name, partyType, gstin) {
+    try {
+      const res = await apiFetch('/parties?search=' + encodeURIComponent(name));
+      const match = (res.data || []).find(p => p.name.toLowerCase() === name.toLowerCase());
+      if (match) return match.id;
+    } catch (e) { /* fall through to create */ }
+    const created = await apiFetch('/parties', { method: 'POST', body: JSON.stringify({ name, party_type: partyType, gstin: gstin || null }) });
+    return created.data.id;
+  }
+
+  function calcInvoice() {
+    const rate = parseFloat(document.getElementById('inv-rate').value) || 0;
+    const qty = parseFloat(document.getElementById('inv-qty').value) || 1;
+    const gstPct = parseFloat(document.getElementById('inv-gst').value) / 100;
+    const taxable = rate * qty;
+    const tax = taxable * gstPct;
+    const total = taxable + tax;
+    document.getElementById('inv-taxable').textContent = rate ? inr(taxable) : '—';
+    document.getElementById('inv-tax').textContent = tax ? inr(tax) : '—';
+    document.getElementById('inv-total').textContent = total ? inr(total) : '—';
+  }
+
+  function resetInvoiceForm() {
+    ['inv-party', 'inv-gstin', 'inv-item', 'inv-rate'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('inv-qty').value = '1';
+    document.getElementById('inv-taxable').textContent = '—';
+    document.getElementById('inv-tax').textContent = '—';
+    document.getElementById('inv-total').textContent = '—';
+  }
+
+  async function createInvoice() {
+    const errEl = document.getElementById('inv-error'); errEl.classList.remove('show');
+    const party = document.getElementById('inv-party').value.trim();
+    const item = document.getElementById('inv-item').value.trim();
+    const qty = parseFloat(document.getElementById('inv-qty').value) || 1;
+    const rate = parseFloat(document.getElementById('inv-rate').value) || 0;
+    const gstRate = parseFloat(document.getElementById('inv-gst').value);
+    const date = document.getElementById('inv-date').value || new Date().toISOString().split('T')[0];
+    const type = document.getElementById('inv-type').value;
+    const placeOfSupply = document.getElementById('inv-place').value;
+    const gstin = document.getElementById('inv-gstin').value.trim();
+
+    if (!party) { errEl.textContent = 'Enter party name'; errEl.classList.add('show'); return; }
+    if (!item) { errEl.textContent = 'Enter item description'; errEl.classList.add('show'); return; }
+    if (!rate) { errEl.textContent = 'Enter invoice amount'; errEl.classList.add('show'); return; }
+
+    const btn = document.getElementById('inv-save-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner spin"></i> Saving…';
+    try {
+      const partyId = await resolvePartyByName(party, type === 'sale' ? 'customer' : 'supplier', gstin);
+      await apiFetch('/invoices', {
+        method: 'POST',
+        body: JSON.stringify({
+          party_id: partyId, invoice_date: date, invoice_type: type, place_of_supply: placeOfSupply,
+          items: [{ description: item, quantity: qty, rate, gst_rate: gstRate }]
+        })
+      });
+      showToast('Invoice created & added to GSTR-1 queue ✓');
+      closeModal('new-invoice-modal');
+      resetInvoiceForm();
+      loadPageData(document.querySelector('.page.active').id.replace('page-', ''));
+    } catch (e) {
+      errEl.textContent = e.message; errEl.classList.add('show');
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Create Invoice';
+    }
+  }
+
+  /* ════════════════════════════════════════════
+     EXPENSES
+  ════════════════════════════════════════════ */
+  async function loadExpenses() {
+    try {
+      const now = new Date();
+      const [listRes, statsRes] = await Promise.all([
+        apiFetch('/expenses?limit=50'),
+        apiFetch('/expenses/stats?month=' + (now.getMonth() + 1) + '&year=' + now.getFullYear()),
+      ]);
+      const expenses = listRes.data || [];
+      const stats = statsRes.data || {};
+
+      document.getElementById('exp-stat-total').textContent = inr(stats.total_amount || 0);
+      document.getElementById('exp-stat-total').classList.remove('skel');
+      document.getElementById('exp-stat-itc').textContent = inr(stats.itc_claimable || 0);
+      document.getElementById('exp-stat-itc').classList.remove('skel');
+      document.getElementById('exp-stat-nongst').textContent = inr(stats.non_gst_expenses || 0);
+      document.getElementById('exp-stat-nongst').classList.remove('skel');
+
+      const tbody = document.getElementById('expenses-tbody');
+      tbody.innerHTML = expenses.length ? expenses.map(e => {
+        const itcPill = e.itc_eligible ? '<span class="pill pill-success"><i class="fas fa-check"></i> Yes</span>' : '<span class="pill pill-danger">No</span>';
+        return '<tr><td>' + fmtDate(e.expense_date) + '</td><td>' + esc(e.category) + '</td><td>' + esc(e.description || '—') + '</td>' +
+          '<td>' + esc(e.vendor_name || e.party_name || '—') + '</td><td>' + inr(e.total_amount) + '</td>' +
+          '<td>' + (parseFloat(e.gst_amount) > 0 ? inr(e.gst_amount) : '—') + '</td><td>' + itcPill + '</td></tr>';
+      }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--hint);padding:14px;">No expenses recorded yet</td></tr>';
+    } catch (e) { showToast(e.message, true); }
+  }
+
+  async function addExpense() {
+    const errEl = document.getElementById('exp-error'); errEl.classList.remove('show');
+    const amount = parseFloat(document.getElementById('exp-amount').value) || 0;
+    const date = document.getElementById('exp-date').value || new Date().toISOString().split('T')[0];
+    if (!amount) { errEl.textContent = 'Enter an amount'; errEl.classList.add('show'); return; }
+
+    const btn = document.getElementById('exp-save-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner spin"></i> Saving…';
+    try {
+      await apiFetch('/expenses', {
+        method: 'POST',
+        body: JSON.stringify({
+          expense_date: date,
+          category: document.getElementById('exp-category').value,
+          amount,
+          vendor_name: document.getElementById('exp-vendor').value.trim() || null,
+          gst_rate: parseFloat(document.getElementById('exp-gst').value) || 0,
+          itc_eligible: document.getElementById('exp-itc').value === 'yes',
+          description: document.getElementById('exp-desc').value.trim() || null,
+        })
+      });
+      showToast('Expense recorded ✓');
+      closeModal('add-expense-modal');
+      ['exp-amount', 'exp-vendor', 'exp-desc'].forEach(id => document.getElementById(id).value = '');
+      loadPageData(document.querySelector('.page.active').id.replace('page-', ''));
+    } catch (e) {
+      errEl.textContent = e.message; errEl.classList.add('show');
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Add Expense';
+    }
+  }
+
+  /* ════════════════════════════════════════════
+     GST FILING
+  ════════════════════════════════════════════ */
+  async function loadGST() {
+    try {
+      const now = new Date();
+      const period = periodStr(now);
+      const [returnsRes, dueRes] = await Promise.all([apiFetch('/gst/returns'), apiFetch('/gst/due')]);
+      const returns = returnsRes.data || [];
+      const due = dueRes.data;
+
+      document.getElementById('gst-page-alert-text').innerHTML = due.filed
+        ? ('<strong>GSTR-3B already filed</strong> for ' + due.period + '. Net tax paid: ' + inr(due.net_payable) + '.')
+        : ('<strong>GSTR-3B due ' + fmtDate(due.due_date) + '.</strong> Auto-computed from your invoices and purchases. Net tax payable: ' + inr(due.net_payable) + '. File before the deadline to avoid penalty.');
+
+      const gstr1 = returns.find(r => r.return_type === 'GSTR-1' && r.period === period);
+      document.getElementById('gst1-status').innerHTML = gstr1 && gstr1.status === 'filed'
+        ? '<span class="pill pill-success"><i class="fas fa-check"></i> Filed</span>'
+        : '<span class="pill pill-warn"><i class="fas fa-clock"></i> Pending</span>';
+      document.getElementById('gst1-meta').textContent = gstr1
+        ? ('Period: ' + period + (gstr1.arn ? (' • ARN: ' + gstr1.arn) : ''))
+        : ('Not generated yet for ' + period);
+
+      let gstr3b = returns.find(r => r.return_type === 'GSTR-3B' && r.period === period);
+      if (!gstr3b) {
+        try {
+          const gen = await apiFetch('/gst/returns/generate', { method: 'POST', body: JSON.stringify({ return_type: 'GSTR-3B', period }) });
+          gstr3b = gen.data;
+        } catch (genErr) { /* leave empty state */ }
+      }
+      currentDraftReturnId = gstr3b ? gstr3b.id : null;
+
+      document.getElementById('gst3b-status').innerHTML = gstr3b && gstr3b.status === 'filed'
+        ? '<span class="pill pill-success"><i class="fas fa-check"></i> Filed</span>'
+        : '<span class="pill pill-warn"><i class="fas fa-clock"></i> Due ' + fmtDate(due.due_date) + '</span>';
+      document.getElementById('gst3b-meta').textContent = 'Net payable: ' + inr(gstr3b ? gstr3b.net_payable : due.net_payable) + ' • Period: ' + period;
+
+      const fileBtn = document.getElementById('gst3b-file-btn');
+      if (gstr3b && gstr3b.status === 'filed') {
+        fileBtn.disabled = true; fileBtn.style.opacity = '0.5'; fileBtn.innerHTML = '<i class="fas fa-check"></i> Filed';
+      } else {
+        fileBtn.disabled = false; fileBtn.style.opacity = '1'; fileBtn.innerHTML = '<i class="fas fa-paper-plane"></i> File Now';
+      }
+
+      document.getElementById('gst3b-summary-title').textContent = 'GSTR-3B Auto-Computed Summary — ' + period;
+      const tbody = document.getElementById('gst3b-summary-tbody');
+      if (!gstr3b) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--hint);padding:14px;">No data yet for this period</td></tr>';
+      } else {
+        const outTotal = (parseFloat(gstr3b.output_igst) || 0) + (parseFloat(gstr3b.output_cgst) || 0) + (parseFloat(gstr3b.output_sgst) || 0);
+        const itcTotal = (parseFloat(gstr3b.itc_igst) || 0) + (parseFloat(gstr3b.itc_cgst) || 0) + (parseFloat(gstr3b.itc_sgst) || 0);
+        tbody.innerHTML =
+          '<tr><td>Outward taxable supplies</td><td>' + inr(gstr3b.taxable_amount) + '</td><td>' + inr(gstr3b.output_igst) + '</td><td>' + inr(gstr3b.output_cgst) + '</td><td>' + inr(gstr3b.output_sgst) + '</td><td>' + inr(outTotal) + '</td></tr>' +
+          '<tr style="background:var(--accent-lt)"><td style="color:var(--accent-dk)">Less: Input Tax Credit (ITC)</td><td>—</td><td style="color:var(--accent-dk)">-' + inr(gstr3b.itc_igst) + '</td><td style="color:var(--accent-dk)">-' + inr(gstr3b.itc_cgst) + '</td><td style="color:var(--accent-dk)">-' + inr(gstr3b.itc_sgst) + '</td><td style="color:var(--accent-dk);font-weight:600">-' + inr(itcTotal) + '</td></tr>' +
+          '<tr style="background:var(--warn-lt)"><td style="font-weight:700">Net Tax Payable</td><td>—</td><td style="font-weight:700">' + inr(gstr3b.net_igst) + '</td><td style="font-weight:700">' + inr(gstr3b.net_cgst) + '</td><td style="font-weight:700">' + inr(gstr3b.net_sgst) + '</td><td style="font-weight:700;color:var(--danger)">' + inr(gstr3b.net_payable) + '</td></tr>';
+      }
+
+      const retBody = document.getElementById('gst-returns-tbody');
+      retBody.innerHTML = returns.length ? returns.slice(0, 10).map(r => {
+        const pill = r.status === 'filed' ? '<span class="pill pill-success"><i class="fas fa-check"></i> Filed</span>' : '<span class="pill pill-warn">' + esc(r.status) + '</span>';
+        return '<tr><td><strong>' + r.return_type + '</strong></td><td>' + r.period + '</td><td>' + pill + '</td><td>' + fmtDate(r.due_date) + '</td><td>' + inr(r.net_payable) + '</td><td class="td-mono" style="font-size:11px">' + (r.arn || '—') + '</td></tr>';
+      }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--hint);padding:14px;">No returns yet</td></tr>';
+    } catch (e) { showToast(e.message, true); }
+  }
+
+  function openGSTR3BModal() {
+    document.getElementById('gstr3b-modal-period').textContent = periodStr();
+    document.getElementById('gstr3b-error').classList.remove('show');
+    const lastRowLastCell = document.querySelector('#gst3b-summary-tbody tr:last-child td:last-child');
+    document.getElementById('gstr3b-modal-payable').textContent = lastRowLastCell ? lastRowLastCell.textContent : '—';
+    openModal('file-gstr3b-modal');
+  }
+
+  async function fileGSTR3B() {
+    const errEl = document.getElementById('gstr3b-error'); errEl.classList.remove('show');
+    if (!currentDraftReturnId) { errEl.textContent = 'No draft return found for this period yet.'; errEl.classList.add('show'); return; }
+
+    const btn = document.getElementById('gstr3b-submit-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner spin"></i> Filing…';
+    try {
+      const arn = 'AA' + Date.now().toString().slice(-10);
+      const res = await apiFetch('/gst/returns/' + currentDraftReturnId + '/file', { method: 'PATCH', body: JSON.stringify({ arn }) });
+      const ret = res.data;
+      closeModal('file-gstr3b-modal');
+      document.getElementById('success-arn').textContent = 'ARN: ' + ret.arn;
+      document.getElementById('success-detail').textContent = 'Tax paid: ' + inr(ret.net_payable) + ' • Period: ' + ret.period;
+      setTimeout(() => openModal('success-modal'), 250);
+      loadGST(); loadDashboard();
+    } catch (e) {
+      errEl.textContent = e.message; errEl.classList.add('show');
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit via GSP';
+    }
+  }
+
+  /* ════════════════════════════════════════════
+     ITR FILING
+  ════════════════════════════════════════════ */
+  let itrEstimate = null;
+
+  async function reviewITREstimate() {
+    try {
+      const now = new Date();
+      const fyStartYear = (now.getMonth() + 1) >= 4 ? now.getFullYear() : now.getFullYear() - 1;
+      const financial_year = fyStartYear + '-' + String(fyStartYear + 1).slice(-2);
+      const deductions = parseFloat(document.getElementById('itr-80c-input').value) || 0;
+
+      const res = await apiFetch('/itr/estimate', { method: 'POST', body: JSON.stringify({ financial_year, deductions_80c: deductions }) });
+      const d = res.data;
+      itrEstimate = d;
+
+      document.getElementById('itr-summary-title').textContent = 'Income Summary — FY ' + d.financial_year;
+      const taxColor = (parseFloat(d.tax_payable) > 0) ? 'var(--danger)' : 'var(--accent)';
+      document.getElementById('itr-summary-tbody').innerHTML =
+        '<tr><td style="color:var(--muted);font-size:13px">Gross business turnover</td><td style="text-align:right;font-weight:600">' + inr(d.gross_turnover) + '</td></tr>' +
+        '<tr><td style="color:var(--muted);font-size:13px">Presumptive income (8% of turnover)</td><td style="text-align:right">' + inr(d.presumptive_income) + '</td></tr>' +
+        '<tr><td style="color:var(--muted);font-size:13px">Deduction u/s 80C</td><td style="text-align:right;color:var(--accent)">- ' + inr(d.deductions_80c) + '</td></tr>' +
+        '<tr><td style="color:var(--muted);font-size:13px">Taxable income</td><td style="text-align:right;font-weight:600">' + inr(d.taxable_income) + '</td></tr>' +
+        '<tr style="border-top:1px solid var(--border)"><td style="font-weight:600;padding-top:10px">Estimated Tax Payable</td><td style="text-align:right;font-weight:700;color:' + taxColor + ';padding-top:10px">' +
+        (parseFloat(d.tax_payable) > 0 ? inr(d.tax_payable) : 'No Tax Due ✓') + '</td></tr>';
+
+      const fileBtn = document.getElementById('itr-file-btn');
+      fileBtn.disabled = false; fileBtn.style.opacity = '1';
+      showToast('P&L estimate computed from your invoices ✓');
+    } catch (e) { showToast(e.message, true); }
+  }
+
+  async function fileITR() {
+    if (!itrEstimate) { showToast('Click Review first', true); return; }
+    try {
+      const d = itrEstimate;
+      const created = await apiFetch('/itr', {
+        method: 'POST',
+        body: JSON.stringify({
+          financial_year: d.financial_year, itr_form: 'ITR-4', gross_turnover: d.gross_turnover,
+          presumptive_income: d.presumptive_income, deductions_80c: d.deductions_80c,
+          taxable_income: d.taxable_income, tax_payable: d.tax_payable,
+        })
+      });
+      const ack = 'ACK' + Date.now().toString().slice(-9);
+      await apiFetch('/itr/' + created.data.id + '/file', { method: 'PATCH', body: JSON.stringify({ acknowledgement_no: ack }) });
+      showToast('ITR-4 filed successfully — Ack: ' + ack + ' ✓');
+      document.getElementById('itr-file-btn').disabled = true;
+      document.getElementById('itr-file-btn').style.opacity = '0.5';
+    } catch (e) { showToast(e.message, true); }
+  }
+
+  /* ════════════════════════════════════════════
+     SETTINGS
+  ════════════════════════════════════════════ */
+  async function loadSettings() {
+    try {
+      const res = await apiFetch('/auth/me');
+      const biz = res.data.business || {};
+      document.getElementById('set-name').value = biz.name || '';
+      document.getElementById('set-gstin').value = biz.gstin || '';
+      document.getElementById('set-pan').value = biz.pan || '';
+      document.getElementById('set-mobile').value = (res.data.user && res.data.user.mobile) || '';
+      document.getElementById('set-business-type').value = biz.business_type || 'retail';
+      document.getElementById('set-gst-scheme').value = biz.gst_scheme || 'regular';
+      document.getElementById('set-city').value = biz.city || '';
+      document.getElementById('set-state-code').value = biz.state_code || '';
+      document.getElementById('set-address').value = biz.address || '';
+    } catch (e) { showToast(e.message, true); }
+  }
+
+  async function saveSettings() {
+    try {
+      const payload = {
+        name: document.getElementById('set-name').value.trim(),
+        gstin: document.getElementById('set-gstin').value.trim() || null,
+        pan: document.getElementById('set-pan').value.trim() || null,
+        business_type: document.getElementById('set-business-type').value,
+        gst_scheme: document.getElementById('set-gst-scheme').value,
+        city: document.getElementById('set-city').value.trim(),
+        state_code: document.getElementById('set-state-code').value.trim(),
+        address: document.getElementById('set-address').value.trim(),
+      };
+      const res = await apiFetch('/auth/business', { method: 'PATCH', body: JSON.stringify(payload) });
+      currentBusiness = res.data;
+      document.getElementById('sb-business-name').textContent = currentBusiness.name;
+      document.getElementById('gstin-badge-text').textContent = currentBusiness.gstin ? 'GSTIN Verified' : 'GSTIN Not Set';
+      showToast('Business profile saved ✓');
+    } catch (e) { showToast(e.message, true); }
+  }
+
+  /* ════════════════════════════════════════════
+     WHATSAPP COMMAND PROCESSOR (live API)
+  ════════════════════════════════════════════ */
+  function quickTryWA(cmd) {
+    openModal('wa-quick-modal');
+    document.getElementById('wa-cmd').value = cmd;
+  }
+
+  async function processWACommand() {
+    const cmd = document.getElementById('wa-cmd').value.trim();
+    const result = document.getElementById('wa-result');
+    result.style.display = 'block';
+    if (!cmd) { result.innerHTML = '⚠ Type a command first.'; return; }
+    if (!currentBusiness) { result.innerHTML = '⚠ No business loaded.'; return; }
+    result.innerHTML = '<i class="fas fa-spinner spin"></i> Processing…';
+    try {
+      const res = await fetch('/api/whatsapp/simulate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_id: currentBusiness.id, message: cmd })
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'Could not process command');
+      result.innerHTML = esc(body.data.reply);
+      if (document.querySelector('.page.active').id === 'page-dashboard') loadDashboard();
+    } catch (e) {
+      result.innerHTML = '⚠ ' + esc(e.message);
+    }
+  }
+
+  /* ════════════════════════════════════════════
+     BOOT
+  ════════════════════════════════════════════ */
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('input[type="date"]').forEach(d => {
+      if (!d.value) d.value = new Date().toISOString().split('T')[0];
+    });
+    checkAuth();
   });
 </script>
+
 </body>
 </html>
