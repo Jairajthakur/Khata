@@ -1,5 +1,8 @@
 const errorHandler = (err, req, res, next) => {
-  console.error(`[${new Date().toISOString()}] ERROR:`, err.message);
+  const errStr = err instanceof Error
+    ? err.message
+    : (typeof err === 'object' ? JSON.stringify(err) : String(err));
+  console.error(`[${new Date().toISOString()}] ERROR:`, errStr);
 
   if (err.code === '23505') { // PostgreSQL unique violation
     return res.status(409).json({ error: 'Record already exists', detail: err.detail });
