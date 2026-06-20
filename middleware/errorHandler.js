@@ -12,8 +12,12 @@ const errorHandler = (err, req, res, next) => {
   }
 
   const status = err.status || 500;
+  // Always serialize error as a plain string so the frontend never receives [object Object]
+  const message = typeof err.message === 'string'
+    ? err.message
+    : (err.message ? JSON.stringify(err.message) : 'Internal server error');
   res.status(status).json({
-    error: err.message || 'Internal server error',
+    error: message,
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 };
