@@ -9,7 +9,7 @@ const { ok } = require('../middleware/errorHandler');
 const { query } = require('../config/db');
 const { computeGSTR3B, getDueDate } = require('../utils/gstCalculator');
 
-const WB_BASE = 'https://developer.whitebooks.in';
+const WB_BASE = 'https://gsp.whitebooks.in';
 
 // ─── token cache (per user session) ───────────────────────────────
 const tokenCache = {};
@@ -24,7 +24,7 @@ async function getWBToken(clientId, clientSecret) {
     res = await fetch(`${WB_BASE}/api/authenticate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientid: clientId, clientsecret: clientSecret }),
+      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
     });
   } catch (fetchErr) {
     throw new Error(`Cannot reach WhiteBooks API: ${fetchErr.message}`);
