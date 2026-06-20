@@ -69,7 +69,7 @@ if (proxyUrl) {
   try {
     const { HttpsProxyAgent } = require('https-proxy-agent');
     proxyAgent = new HttpsProxyAgent(proxyUrl);
-    console.log('[WhiteBooks] ✓ Using egress proxy:', proxyUrl.replace(/:\\/\\/.*@/, '://***@'));
+    console.log('[WhiteBooks] ✓ Using egress proxy:', proxyUrl.replace(/:\/\/[^@]+@/, '://***@'));
   } catch (e) {
     console.error('[WhiteBooks] ✗ https-proxy-agent not installed. Run: npm install https-proxy-agent');
     console.error('[WhiteBooks]   Without a proxy, Railway cannot reach gsp.whitebooks.in.');
