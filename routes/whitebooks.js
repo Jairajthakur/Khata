@@ -51,9 +51,11 @@ const { computeGSTR3B } = require('../utils/gstCalculator');
 // Use sandbox URL unless WHITEBOOKS_ENV is explicitly set to "production"
 // Default: sandbox (apisandbox.whitebooks.in) — safe for testing, no proxy needed
 // Production: set WHITEBOOKS_ENV=production in Railway env vars (requires proxy + IP whitelist)
+// Production: https://gsp.whitebooks.in
+// Sandbox: https://apisandbox.whitebooks.in/gst  (note /gst prefix on sandbox)
 const WB_BASE = process.env.WHITEBOOKS_ENV === 'production'
   ? 'https://gsp.whitebooks.in'
-  : 'https://apisandbox.whitebooks.in';
+  : 'https://apisandbox.whitebooks.in/gst';
 
 // ─── Fetch timeout (ms). WhiteBooks GSP can be slow; 20s is safe. ───────────
 const WB_TIMEOUT_MS = 20000;
@@ -153,12 +155,16 @@ async function getWBToken(clientId, clientSecret) {
 
   let res;
   try {
+    // WhiteBooks authenticate: credentials sent as headers (clientid + clientsecret)
     res = await fetch(
       `${WB_BASE}/api/authenticate`,
       fetchOptions({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
+        headers: {
+          'Content-Type': 'application/json',
+          'clientid': clientId,
+          'clientsecret': clientSecret,
+        },
       })
     );
   } catch (fetchErr) {
