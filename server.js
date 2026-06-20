@@ -45,7 +45,9 @@ app.get('/api/health', (req, res) => {
 //     code: ETIMEDOUT    → Timeout      → set WHITEBOOKS_PROXY_URL + whitelist IP
 //   proxy_active: true   → WHITEBOOKS_PROXY_URL is loaded and in use
 app.get('/api/wb-ping', async (req, res) => {
-  const WB_BASE = 'https://gsp.whitebooks.in';
+  const WB_BASE = process.env.WHITEBOOKS_ENV === 'production'
+    ? 'https://gsp.whitebooks.in'
+    : 'https://apisandbox.whitebooks.in';
   const proxyUrl = process.env.WHITEBOOKS_PROXY_URL || process.env.FIXIE_URL || '';
   let agent = null;
 
