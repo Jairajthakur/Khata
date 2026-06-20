@@ -48,8 +48,10 @@ const { ok } = require('../middleware/errorHandler');
 const { query } = require('../config/db');
 const { computeGSTR3B } = require('../utils/gstCalculator');
 
-// Use sandbox URL for testing; switch to https://gsp.whitebooks.in for production
-const WB_BASE = process.env.NODE_ENV === 'production' && process.env.WHITEBOOKS_ENV === 'production'
+// Use sandbox URL unless WHITEBOOKS_ENV is explicitly set to "production"
+// Default: sandbox (apisandbox.whitebooks.in) — safe for testing, no proxy needed
+// Production: set WHITEBOOKS_ENV=production in Railway env vars (requires proxy + IP whitelist)
+const WB_BASE = process.env.WHITEBOOKS_ENV === 'production'
   ? 'https://gsp.whitebooks.in'
   : 'https://apisandbox.whitebooks.in';
 
