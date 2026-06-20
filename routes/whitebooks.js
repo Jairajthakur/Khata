@@ -2,28 +2,42 @@
  * WhiteBooks GST API Integration
  * Handles: Auth token, GSTIN verify, GSTR-2B fetch, GSTR-1 file, GSTR-3B file
  *
- * ─── TROUBLESHOOTING "Cannot reach WhiteBooks API: fetch failed" ───────────
+ * ─── FIX: DNS / Network failure on Railway ───────────────────────────────────
  *
- * This error means Railway's server cannot make outbound TCP/HTTPS connections
- * to gsp.whitebooks.in. Common causes:
+ * The error "Cannot reach WhiteBooks API: DNS lookup failed for gsp.whitebooks.in"
+ * means Railway's server cannot resolve or reach gsp.whitebooks.in.
  *
- *  1. IP Whitelist required by WhiteBooks GSP
- *     WhiteBooks (like most GSPs) requires your server's outbound IP to be
- *     registered with the GST portal. Railway uses dynamic IPs by default.
- *     Fix: Add a static-IP egress proxy (Fixie, QuotaGuard, or Nginx on a
- *     VPS with a fixed IP). Set WHITEBOOKS_PROXY_URL in .env, and this file
- *     will automatically route traffic through it.
+ * ROOT CAUSE: Railway uses dynamic/shared IPs. WhiteBooks GSP (like all GSPs)
+ * requires your server's outbound IP to be whitelisted with the GST portal.
+ * Dynamic IPs are never whitelisted, so connections are blocked at the DNS/TCP level.
  *
- *  2. Railway network policy
- *     Some Railway plans block or throttle outbound HTTPS to unknown domains.
- *     Fix: Visit /api/wb-ping to see the exact error code:
- *       ENOTFOUND   → DNS failure  (domain not resolving on Railway)
- *       ECONNREFUSED→ TCP refused  (firewall or IP block)
- *       ETIMEDOUT   → Timeout      (routing / IP whitelist issue)
+ * SOLUTION: Use a static-IP egress proxy so WhiteBooks always sees a fixed IP.
  *
- *  3. Node version < 18 (no native fetch)
- *     Ensure package.json has "engines": { "node": ">=18.0.0" }
+ * STEP 1 — Install proxy agent (already in package.json):
+ *   npm install https-proxy-agent
  *
+ * STEP 2 — Get a static-IP proxy (free tiers available):
+ *   Option A: Fixie (https://usefixie.com) — easiest, Railway addon available
+ *     Railway Dashboard → your project → + New → Fixie
+ *     This auto-sets FIXIE_URL env var. Copy that value to WHITEBOOKS_PROXY_URL.
+ *   Option B: QuotaGuard Static (https://quotaguard.com)
+ *   Option C: Your own Nginx/Squid on a ₹200/mo VPS with static IP
+ *
+ * STEP 3 — Set Railway environment variable:
+ *   WHITEBOOKS_PROXY_URL=http://user:pass@criterium.usefixie.com:80
+ *   (or whatever your proxy provider gives you)
+ *
+ * STEP 4 — Whitelist the proxy's static IP with WhiteBooks:
+ *   Login to developer.whitebooks.in → Credentials → your GSTIN → IP Whitelist
+ *   Add the static IP from your proxy provider.
+ *
+ * STEP 5 — Redeploy on Railway. Test via GET /api/wb-ping first.
+ *
+ * ─── DIAGNOSING THE EXACT ERROR ──────────────────────────────────────────────
+ * Visit GET /api/wb-ping (no auth required) to see the exact error code:
+ *   ENOTFOUND    → DNS failure  → Railway can't resolve gsp.whitebooks.in
+ *   ECONNREFUSED → TCP refused  → your IP is blocked / not whitelisted
+ *   ETIMEDOUT    → Timeout      → routing / IP whitelist issue
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -36,33 +50,39 @@ const { computeGSTR3B } = require('../utils/gstCalculator');
 
 const WB_BASE = 'https://gsp.whitebooks.in';
 
-// ─── Fetch timeout (ms). WhiteBooks GSP can be slow; 15s is safe. ──────────
-const WB_TIMEOUT_MS = 15000;
+// ─── Fetch timeout (ms). WhiteBooks GSP can be slow; 20s is safe. ───────────
+const WB_TIMEOUT_MS = 20000;
 
-// ─── Optional HTTP proxy for static-IP egress (set WHITEBOOKS_PROXY_URL) ───
-// Example .env entry:  WHITEBOOKS_PROXY_URL=http://user:pass@proxy.fixie.com:80
-// When set, all WhiteBooks requests are tunnelled through the proxy so that
-// the GST portal / WhiteBooks see a fixed IP that can be whitelisted.
+// ─── Static-IP egress proxy for Railway ─────────────────────────────────────
+// Set WHITEBOOKS_PROXY_URL in Railway environment variables.
+// Example: WHITEBOOKS_PROXY_URL=http://user:pass@criterium.usefixie.com:80
+//
+// If you added Fixie as a Railway addon, it sets FIXIE_URL automatically.
+// In that case set: WHITEBOOKS_PROXY_URL=${FIXIE_URL}
 let proxyAgent = null;
-if (process.env.WHITEBOOKS_PROXY_URL) {
+const proxyUrl = process.env.WHITEBOOKS_PROXY_URL || process.env.FIXIE_URL || '';
+
+if (proxyUrl) {
   try {
-    // https-proxy-agent is optional; only loaded if env var is set
-    // npm install https-proxy-agent
     const { HttpsProxyAgent } = require('https-proxy-agent');
-    proxyAgent = new HttpsProxyAgent(process.env.WHITEBOOKS_PROXY_URL);
-    console.log('[WhiteBooks] Using egress proxy:', process.env.WHITEBOOKS_PROXY_URL.replace(/:\/\/.*@/, '://***@'));
+    proxyAgent = new HttpsProxyAgent(proxyUrl);
+    console.log('[WhiteBooks] ✓ Using egress proxy:', proxyUrl.replace(/:\\/\\/.*@/, '://***@'));
   } catch (e) {
-    console.warn('[WhiteBooks] WHITEBOOKS_PROXY_URL is set but https-proxy-agent is not installed. Run: npm install https-proxy-agent');
+    console.error('[WhiteBooks] ✗ https-proxy-agent not installed. Run: npm install https-proxy-agent');
+    console.error('[WhiteBooks]   Without a proxy, Railway cannot reach gsp.whitebooks.in.');
   }
+} else {
+  console.warn('[WhiteBooks] ⚠ No WHITEBOOKS_PROXY_URL set.');
+  console.warn('[WhiteBooks]   On Railway, requests to gsp.whitebooks.in will likely fail (ENOTFOUND/ECONNREFUSED).');
+  console.warn('[WhiteBooks]   Add Fixie addon on Railway or set WHITEBOOKS_PROXY_URL. See routes/whitebooks.js header.');
 }
 
-// ─── token cache (per clientId, in-memory) ─────────────────────────────────
+// ─── Token cache (per clientId, in-memory) ───────────────────────────────────
 const tokenCache = {};
 
 /**
- * Build fetch options with timeout + optional proxy agent.
- * @param {RequestInit} base - Base fetch options (method, headers, body)
- * @returns {RequestInit}
+ * Build fetch options with timeout + proxy agent.
+ * Works with both Node 18+ native fetch (undici) and node-fetch.
  */
 function fetchOptions(base = {}) {
   const opts = {
@@ -70,12 +90,38 @@ function fetchOptions(base = {}) {
     signal: AbortSignal.timeout(WB_TIMEOUT_MS),
   };
   if (proxyAgent) {
-    // Node 18+ fetch (undici) accepts a `dispatcher` for proxy; for older
-    // compatibility we attach as `agent` (works with node-fetch v2/v3).
-    opts.agent = proxyAgent;
-    opts.dispatcher = proxyAgent; // undici / Node 18+ native fetch
+    opts.agent = proxyAgent;       // node-fetch / older compat
+    opts.dispatcher = proxyAgent;  // undici / Node 18+ native fetch
   }
   return opts;
+}
+
+/**
+ * Convert a raw fetch error into a human-readable message with a fix hint.
+ */
+function humanizeNetworkError(err) {
+  const code = err.cause?.code;
+  const isTimeout = err.name === 'TimeoutError' || err.name === 'AbortError';
+
+  if (isTimeout) {
+    return proxyAgent
+      ? 'Request timed out via proxy — ensure the proxy\'s static IP is whitelisted with WhiteBooks.'
+      : 'Request timed out — Railway cannot reach gsp.whitebooks.in. Add WHITEBOOKS_PROXY_URL (see Fixie addon).';
+  }
+  if (code === 'ENOTFOUND') {
+    return proxyAgent
+      ? 'DNS lookup failed even via proxy — check WHITEBOOKS_PROXY_URL is correct.'
+      : 'DNS lookup failed for gsp.whitebooks.in — Railway cannot resolve this domain. Set WHITEBOOKS_PROXY_URL in Railway env vars (see routes/whitebooks.js).';
+  }
+  if (code === 'ECONNREFUSED') {
+    return proxyAgent
+      ? 'Connection refused via proxy — ensure the proxy\'s static IP is whitelisted with WhiteBooks GSP.'
+      : 'Connection refused by gsp.whitebooks.in — your server\'s IP is not whitelisted. Set WHITEBOOKS_PROXY_URL.';
+  }
+  if (code === 'ECONNRESET') {
+    return 'Connection was reset — WhiteBooks GSP may be temporarily down. Retry in a few minutes.';
+  }
+  return `${err.message}${code ? ` (${code})` : ''}. Visit /api/wb-ping for diagnostics.`;
 }
 
 /**
@@ -99,20 +145,7 @@ async function getWBToken(clientId, clientSecret) {
       })
     );
   } catch (fetchErr) {
-    // Produce a human-readable message that hints at the real cause
-    const code = fetchErr.cause?.code;
-    const isTimeout = fetchErr.name === 'TimeoutError' || fetchErr.name === 'AbortError';
-    let hint = '';
-    if (isTimeout) {
-      hint = 'Request timed out — WhiteBooks GSP may be blocking your server\'s IP. Set WHITEBOOKS_PROXY_URL in .env to use a static-IP egress proxy.';
-    } else if (code === 'ENOTFOUND') {
-      hint = 'DNS lookup failed for gsp.whitebooks.in — check Railway network / DNS settings.';
-    } else if (code === 'ECONNREFUSED') {
-      hint = 'Connection refused by gsp.whitebooks.in — your server\'s IP may not be whitelisted.';
-    } else {
-      hint = `${fetchErr.message}${code ? ` (${code})` : ''}. Visit /api/wb-ping for diagnostics.`;
-    }
-    throw new Error(`Cannot reach WhiteBooks API: ${hint}`);
+    throw new Error(`Cannot reach WhiteBooks API: ${humanizeNetworkError(fetchErr)}`);
   }
 
   const contentType = res.headers.get('content-type') || '';
@@ -166,8 +199,7 @@ async function wbGet(path, token, clientId) {
       })
     );
   } catch (err) {
-    const code = err.cause?.code;
-    throw new Error(`Cannot reach WhiteBooks API: ${err.message}${code ? ` (${code})` : ''}`);
+    throw new Error(`Cannot reach WhiteBooks API: ${humanizeNetworkError(err)}`);
   }
   return parseWBResponse(res, `GET ${path}`);
 }
@@ -187,15 +219,14 @@ async function wbPost(path, body, token, clientId) {
       })
     );
   } catch (err) {
-    const code = err.cause?.code;
-    throw new Error(`Cannot reach WhiteBooks API: ${err.message}${code ? ` (${code})` : ''}`);
+    throw new Error(`Cannot reach WhiteBooks API: ${humanizeNetworkError(err)}`);
   }
   return parseWBResponse(res, `POST ${path}`);
 }
 
 router.use(authenticate, requireBusiness);
 
-// ─── GET /api/wb/config  — get saved WB credentials for this business ───────
+// ─── GET /api/wb/config  — get saved WB credentials for this business ────────
 router.get('/config', async (req, res, next) => {
   try {
     const result = await query(
@@ -242,7 +273,7 @@ router.post('/config', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ─── helper: fetch credentials from DB ───────────────────────────────────────
+// ─── Helper: fetch credentials from DB ───────────────────────────────────────
 async function getCreds(businessId) {
   const r = await query(
     'SELECT wb_client_id, wb_client_secret, wb_gstin, wb_gst_username FROM businesses WHERE id = $1',
@@ -259,15 +290,17 @@ async function getCreds(businessId) {
 }
 
 // ─── POST /api/wb/test  — test connection with saved credentials ──────────────
-// This is the endpoint called by the "Test Connection" button in Settings.
-// Returns success/failure + actionable error message.
 router.post('/test', async (req, res, next) => {
   try {
     const creds = await getCreds(req.business.id);
-    // Clear any stale cached token so we always do a live auth call
+    // Clear stale cached token so we always do a live auth call
     delete tokenCache[creds.wb_client_id];
-    const token = await getWBToken(creds.wb_client_id, creds.wb_client_secret);
-    ok(res, { success: true, message: 'Connected to WhiteBooks GST API ✓' });
+    await getWBToken(creds.wb_client_id, creds.wb_client_secret);
+    ok(res, {
+      success: true,
+      message: 'Connected to WhiteBooks GST API ✓',
+      proxy_active: !!proxyAgent,
+    });
   } catch (err) { next(err); }
 });
 
