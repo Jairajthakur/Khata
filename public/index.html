@@ -784,6 +784,7 @@
           <div class="return-meta" id="gst3b-meta"></div>
           <div class="return-actions">
             <button class="btn btn-sm btn-primary" id="gst3b-file-btn" onclick="openGSTR3BModal()"><i class="fas fa-paper-plane"></i> File Now</button>
+            <button class="btn btn-sm btn-success" onclick="fetchGSTR2B()" title="Auto-import ITC from GST Portal"><i class="fas fa-cloud-download-alt"></i> Fetch 2B</button>
             <button class="btn btn-sm" onclick="goPage('gst')"><i class="fas fa-eye"></i> Preview</button>
           </div>
         </div>
@@ -1032,20 +1033,25 @@
           <button class="btn btn-sm btn-primary">Upgrade to Annual (₹4,499/yr)</button>
         </div>
       </div>
-      <div class="card">
-        <div class="card-title">GSP & ERI Integrations</div>
-        <div style="display:flex;flex-direction:column;gap:12px;">
-          <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:var(--radius);">
-            <div style="width:36px;height:36px;border-radius:8px;background:var(--accent-lt);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:16px;"><i class="fas fa-plug"></i></div>
-            <div style="flex:1"><div style="font-weight:600;font-size:13px;">Masters India GSP</div><div style="font-size:12px;color:var(--muted);">GST Suvidha Provider — GSTN filings</div></div>
-            <span class="pill pill-success">Connected</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:var(--radius);">
-            <div style="width:36px;height:36px;border-radius:8px;background:var(--info-lt);display:flex;align-items:center;justify-content:center;color:var(--info);font-size:16px;"><i class="fas fa-file-alt"></i></div>
-            <div style="flex:1"><div style="font-weight:600;font-size:13px;">ERI Partner — ITR Filing</div><div style="font-size:12px;color:var(--muted);">e-Return Intermediary for Income Tax</div></div>
-            <span class="pill pill-success">Connected</span>
-          </div>
+      <div class="card" id="wb-settings-card">
+        <div class="card-row">
+          <div class="card-title" style="margin-bottom:0;"><i class="fas fa-plug" style="color:var(--accent);margin-right:6px;"></i> WhiteBooks GST API</div>
+          <span id="wb-status-badge" class="pill pill-warn">Not configured</span>
         </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;margin-top:4px;">Connect WhiteBooks GSP to auto-fetch GSTR-2B, file GSTR-3B directly to GST portal, and verify GSTINs.</div>
+        <div class="form-grid">
+          <div class="form-group"><label>GST Client ID</label><input id="wb-client-id" placeholder="GSTS13492519-de66-..." /></div>
+          <div class="form-group"><label>GST Client Secret</label><input id="wb-client-secret" type="password" placeholder="GSTS145e7e21-..." /></div>
+          <div class="form-group"><label>GSTIN (your business)</label><input id="wb-gstin" placeholder="27AAGCB1286Q1Z4" /></div>
+          <div class="form-group"><label>GST Username</label><input id="wb-gst-username" placeholder="MH_NT2.1641" /></div>
+          <div class="form-group"><label>e-Invoice Client ID <span style="color:var(--hint);font-size:11px;">(optional)</span></label><input id="wb-einv-client-id" placeholder="EINS54322623-..." /></div>
+          <div class="form-group"><label>e-Invoice Client Secret</label><input id="wb-einv-secret" type="password" placeholder="EINS534e0db1-..." /></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <button class="btn btn-primary" onclick="saveWBConfig()"><i class="fas fa-save"></i> Save Credentials</button>
+          <button class="btn" onclick="testWBConfig()" id="wb-test-btn"><i class="fas fa-flask"></i> Test Connection</button>
+        </div>
+        <div id="wb-test-result" style="margin-top:10px;font-size:12px;display:none;"></div>
       </div>
     </div>
 
@@ -1105,13 +1111,21 @@
     <div class="filing-row done"><i class="fas fa-check-circle" style="color:var(--accent)"></i> <span id="gstr3b-modal-net">Net tax computed</span></div>
     <div style="margin:16px 0;padding:14px;background:var(--warn-lt);border-radius:var(--radius);border-left:3px solid var(--warn);font-size:13px;">
       <div style="font-weight:600;color:var(--warn);margin-bottom:6px;"><i class="fas fa-exclamation-triangle"></i> Confirm Filing</div>
-      <div style="color:var(--muted);">Net tax payable: <strong style="color:var(--text);" id="gstr3b-modal-payable">—</strong><br>
-      Payment via GSP → GSTN challan</div>
+      <div style="color:var(--muted);">Net tax payable: <strong style="color:var(--text);" id="gstr3b-modal-payable">—</strong></div>
+    </div>
+    <!-- OTP Step (shown after clicking Send OTP) -->
+    <div id="gstr3b-otp-section" style="display:none;margin-bottom:12px;">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;"><i class="fas fa-mobile-alt"></i> OTP sent to your GST registered mobile/email</div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Enter OTP</label>
+        <input id="gstr3b-otp-input" placeholder="6-digit OTP" maxlength="6" style="letter-spacing:4px;font-size:18px;text-align:center;" />
+      </div>
     </div>
     <div class="auth-error" id="gstr3b-error"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('file-gstr3b-modal')">Cancel</button>
-      <button class="btn btn-primary" id="gstr3b-submit-btn" onclick="fileGSTR3B()"><i class="fas fa-paper-plane"></i> Submit via GSP</button>
+      <button class="btn btn-primary" id="gstr3b-send-otp-btn" onclick="sendGSTOTP()"><i class="fas fa-mobile-alt"></i> Send OTP</button>
+      <button class="btn btn-primary" id="gstr3b-submit-btn" onclick="fileGSTR3B()" style="display:none;"><i class="fas fa-paper-plane"></i> Submit via GSP</button>
     </div>
   </div>
 </div>
@@ -1333,6 +1347,7 @@
     else if (p === 'invoices') loadInvoices();
     else if (p === 'expenses') loadExpenses();
     else if (p === 'gst') loadGST();
+    else if (p === 'settings') loadWBConfig();
     else if (p === 'settings') loadSettings();
   }
 
@@ -2121,6 +2136,173 @@
       result.innerHTML = '⚠ ' + esc(e.message);
     }
   }
+
+
+  /* ════════════════════════════════════════════
+     WHITEBOOKS GST API INTEGRATION
+  ════════════════════════════════════════════ */
+
+  // ── Settings: Load saved WB config ──────────────────────────────────────
+  async function loadWBConfig() {
+    try {
+      const res = await apiFetch('/wb/config');
+      const d = res.data || {};
+      if (d.wb_client_id) {
+        document.getElementById('wb-client-id').value = d.wb_client_id || '';
+        document.getElementById('wb-gstin').value = d.wb_gstin || '';
+        document.getElementById('wb-gst-username').value = d.wb_gst_username || '';
+        if (d.wb_einv_client_id) document.getElementById('wb-einv-client-id').value = d.wb_einv_client_id;
+        const badge = document.getElementById('wb-status-badge');
+        if (badge) { badge.textContent = d.wb_enabled ? 'Connected ✓' : 'Not configured'; badge.className = d.wb_enabled ? 'pill pill-success' : 'pill pill-warn'; }
+      }
+    } catch (e) { /* not critical */ }
+  }
+
+  // ── Settings: Save WB credentials ───────────────────────────────────────
+  async function saveWBConfig() {
+    const btn = document.querySelector('#wb-settings-card .btn-primary');
+    const origText = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+    try {
+      await apiFetch('/wb/config', {
+        method: 'POST',
+        body: JSON.stringify({
+          wb_client_id: document.getElementById('wb-client-id').value.trim(),
+          wb_client_secret: document.getElementById('wb-client-secret').value.trim(),
+          wb_gstin: document.getElementById('wb-gstin').value.trim(),
+          wb_gst_username: document.getElementById('wb-gst-username').value.trim(),
+          wb_einv_client_id: document.getElementById('wb-einv-client-id').value.trim() || null,
+          wb_einv_client_secret: document.getElementById('wb-einv-secret').value.trim() || null,
+        }),
+      });
+      showToast('WhiteBooks credentials saved ✓');
+      const badge = document.getElementById('wb-status-badge');
+      if (badge) { badge.textContent = 'Saved'; badge.className = 'pill pill-warn'; }
+    } catch (e) {
+      showToast('Save failed: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.innerHTML = origText;
+    }
+  }
+
+  // ── Settings: Test WB connection ────────────────────────────────────────
+  async function testWBConfig() {
+    const btn = document.getElementById('wb-test-btn');
+    const result = document.getElementById('wb-test-result');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing…';
+    result.style.display = 'none';
+    try {
+      const res = await apiFetch('/wb/test', { method: 'POST' });
+      result.style.display = 'block';
+      result.style.color = 'var(--accent)';
+      result.innerHTML = '<i class="fas fa-check-circle"></i> ' + (res.data.message || 'Connected!');
+      const badge = document.getElementById('wb-status-badge');
+      if (badge) { badge.textContent = 'Connected ✓'; badge.className = 'pill pill-success'; }
+    } catch (e) {
+      result.style.display = 'block';
+      result.style.color = 'var(--danger)';
+      result.innerHTML = '<i class="fas fa-times-circle"></i> ' + e.message;
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-flask"></i> Test Connection';
+    }
+  }
+
+  // ── GST Filing: Fetch GSTR-2B (auto-import ITC) ─────────────────────────
+  async function fetchGSTR2B() {
+    const now = new Date();
+    // GSTR-2B is available for previous month
+    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const period = String(prevMonth.getMonth() + 1).padStart(2, '0') + prevMonth.getFullYear();
+
+    showToast('Fetching GSTR-2B from GST portal…');
+    try {
+      const res = await apiFetch('/wb/gstr2b?period=' + period);
+      const imported = res.data?.imported_expenses || 0;
+      showToast('GSTR-2B fetched! ' + imported + ' ITC entries auto-imported as expenses ✓');
+      loadGST(); // refresh GST page
+    } catch (e) {
+      if (e.message.includes('not configured')) {
+        showToast('Please add WhiteBooks credentials in Settings first', 'warn');
+        goPage('settings');
+      } else {
+        showToast('Fetch failed: ' + e.message, 'error');
+      }
+    }
+  }
+
+  // ── GST Filing: Send OTP for portal login ───────────────────────────────
+  async function sendGSTOTP() {
+    const btn = document.getElementById('gstr3b-send-otp-btn');
+    const errEl = document.getElementById('gstr3b-error');
+    errEl.classList.remove('show');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending OTP…';
+    try {
+      await apiFetch('/wb/otp/send', { method: 'POST' });
+      document.getElementById('gstr3b-otp-section').style.display = 'block';
+      btn.style.display = 'none';
+      document.getElementById('gstr3b-submit-btn').style.display = '';
+      showToast('OTP sent to your GST registered mobile/email');
+    } catch (e) {
+      if (e.message.includes('not configured')) {
+        errEl.textContent = 'WhiteBooks not configured. Go to Settings → GST API to add credentials.';
+        errEl.classList.add('show');
+        // Fallback: let user file manually by showing submit without OTP
+        document.getElementById('gstr3b-otp-section').style.display = 'none';
+        btn.style.display = 'none';
+        document.getElementById('gstr3b-submit-btn').style.display = '';
+        document.getElementById('gstr3b-submit-btn').innerHTML = '<i class="fas fa-paper-plane"></i> Mark as Filed';
+      } else {
+        errEl.textContent = e.message;
+        errEl.classList.add('show');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-mobile-alt"></i> Retry OTP';
+      }
+    }
+  }
+
+  // ── GST Filing: File GSTR-3B via WhiteBooks ─────────────────────────────
+  async function fileGSTR3B() {
+    const otp = (document.getElementById('gstr3b-otp-input')?.value || '').trim();
+    const btn = document.getElementById('gstr3b-submit-btn');
+    const errEl = document.getElementById('gstr3b-error');
+    errEl.classList.remove('show');
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Filing…';
+
+    try {
+      const now = new Date();
+      const period = String(now.getMonth() + 1).padStart(2, '0') + '-' + now.getFullYear();
+
+      const res = await apiFetch('/wb/gstr3b/file', {
+        method: 'POST',
+        body: JSON.stringify({ period, otp: otp || 'MANUAL', return_id: currentDraftReturnId }),
+      });
+      closeModal('file-gstr3b-modal');
+      showToast('GSTR-3B filed! ARN: ' + (res.data?.arn || '—') + ' ✓');
+      loadGST();
+      loadDashboard();
+    } catch (e) {
+      errEl.textContent = e.message;
+      errEl.classList.add('show');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit via GSP';
+    }
+  }
+
+  // ── Party: Auto-verify GSTIN via WhiteBooks ─────────────────────────────
+  async function verifyGSTIN(gstin, resultElId) {
+    if (!gstin || gstin.length !== 15) return;
+    const el = document.getElementById(resultElId);
+    if (el) { el.textContent = 'Verifying…'; el.style.color = 'var(--muted)'; }
+    try {
+      const res = await apiFetch('/wb/gstin/' + gstin);
+      const d = res.data?.data || res.data || {};
+      const name = d.lgnm || d.tradeName || d.tradeNam || '';
+      if (el && name) { el.textContent = '✓ ' + name; el.style.color = 'var(--accent)'; }
+    } catch (e) {
+      if (el) { el.textContent = ''; }
+    }
+  }
+
 
   /* ════════════════════════════════════════════
      BOOT
