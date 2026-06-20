@@ -1381,7 +1381,10 @@
     document.getElementById('app-root').classList.remove('hidden');
   }
 
+  let authCheckDone = false;
   async function checkAuth() {
+    if (authCheckDone) return;
+    authCheckDone = true;
     const token = getToken();
     if (!token) { showAuthScreen('login'); return; }
     try {
@@ -1390,7 +1393,7 @@
       currentBusiness = res.data.business;
       if (!currentBusiness) { showAuthScreen('business'); }
       else { showApp(); initApp(); }
-    } catch (e) { showAuthScreen('login'); }
+    } catch (e) { authCheckDone = false; showAuthScreen('login'); }
   }
 
   async function doLogin() {
@@ -1482,6 +1485,7 @@
   function doLogout() {
     clearToken();
     currentUser = null; currentBusiness = null;
+    authCheckDone = false;
     document.getElementById('login-email').value = '';
     document.getElementById('login-password').value = '';
     showAuthScreen('login');
