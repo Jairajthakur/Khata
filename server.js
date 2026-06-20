@@ -34,6 +34,15 @@ app.get('/api/health', (req, res) => {
   res.json({ success: true, status: 'ok', time: new Date().toISOString() });
 });
 
+// Force no-cache on all API responses so Railway's proxy never returns 304
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.set('Surrogate-Control', 'no-store');
+  next();
+});
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/parties', partiesRoutes);
