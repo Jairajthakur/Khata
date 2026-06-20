@@ -16,6 +16,7 @@ const gstRoutes = require('./routes/gst');
 const itrRoutes = require('./routes/itr');
 const dashboardRoutes = require('./routes/dashboard');
 const whatsappRoutes = require('./routes/whatsapp');
+const khataRoutes = require('./routes/khata');
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.use('/api/gst', gstRoutes);
 app.use('/api/itr', itrRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/khata', khataRoutes);
 
 // Serve the static demo frontend
 app.use(express.static(path.join(__dirname, 'public')));
