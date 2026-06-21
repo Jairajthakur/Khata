@@ -1034,34 +1034,52 @@
           <button class="btn btn-sm btn-primary">Upgrade to Annual (₹4,499/yr)</button>
         </div>
       </div>
-      <div class="card" id="wb-settings-card">
+      <div class="card" id="sandbox-gst-card">
         <div class="card-row">
-          <div class="card-title" style="margin-bottom:0;"><i class="fas fa-plug" style="color:var(--accent);margin-right:6px;"></i> WhiteBooks GST API</div>
-          <span id="wb-status-badge" class="pill pill-warn">Not configured</span>
+          <div class="card-title" style="margin-bottom:0;"><i class="fas fa-plug" style="color:var(--accent);margin-right:6px;"></i> Sandbox.co.in GST API</div>
+          <span id="sandbox-status-badge" class="pill pill-warn">Checking&#8230;</span>
         </div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;margin-top:4px;">Connect WhiteBooks GSP to auto-fetch GSTR-2B, file GSTR-3B directly to GST portal, and verify GSTINs.</div>
-        <div class="form-grid">
-          <div class="form-group"><label>GST Client ID</label><input id="wb-client-id" placeholder="GSTS13492519-de66-..." /></div>
-          <div class="form-group"><label>GST Client Secret</label><input id="wb-client-secret" type="password" placeholder="GSTS145e7e21-..." /></div>
-          <div class="form-group"><label>GSTIN (your business)</label><input id="wb-gstin" placeholder="27AAGCB1286Q1Z4" /></div>
-          <div class="form-group"><label>GST Username</label><input id="wb-gst-username" placeholder="MH_NT2.1641" /></div>
-          <div class="form-group"><label>WhiteBooks Account Email <span style="color:var(--danger);font-size:11px;">*</span></label><input id="wb-email" type="email" placeholder="email@yourdomain.com (registered on developer.whitebooks.in)" /></div>
-          <div class="form-group"><label>e-Invoice Client ID <span style="color:var(--hint);font-size:11px;">(optional)</span></label><input id="wb-einv-client-id" placeholder="EINS54322623-..." /></div>
-          <div class="form-group"><label>e-Invoice Client Secret</label><input id="wb-einv-secret" type="password" placeholder="EINS534e0db1-..." /></div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;margin-top:4px;">
+          Connected via Sandbox.co.in GSP &#8212; auto-sync GSTR-1 &amp; GSTR-2A, file GSTR-3B, verify GSTINs.
+          API credentials are set in Railway env vars (<code>SANDBOX_API_KEY</code>, <code>SANDBOX_API_SECRET</code>).
         </div>
-        <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
-          <button class="btn btn-primary" onclick="saveWBConfig()"><i class="fas fa-save"></i> Save Credentials</button>
-          <button class="btn" onclick="wbSendOtp()" id="wb-otp-btn"><i class="fas fa-mobile-alt"></i> Send OTP</button>
+        <div style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);padding:12px;font-size:12px;margin-bottom:14px;">
+          <div style="font-weight:600;margin-bottom:6px;color:var(--text);">Session Status</div>
+          <div id="sandbox-session-info" style="color:var(--muted);">Loading&#8230;</div>
         </div>
-        <!-- OTP verification row — shown after Send OTP -->
-        <div id="wb-otp-row" style="display:none;margin-top:12px;display:none;">
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <input id="wb-otp-input" placeholder="Enter OTP (sandbox: 575757)" style="width:220px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;" maxlength="6" />
-            <button class="btn btn-primary" onclick="wbVerifyOtp()" id="wb-verify-btn"><i class="fas fa-check"></i> Verify OTP</button>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">
+          <i class="fas fa-info-circle" style="color:var(--info);"></i>
+          Before syncing, go to <strong>gst.gov.in &#8594; My Profile &#8594; Manage API Access &#8594; Enable</strong> (max 30 days).
+        </div>
+        <div class="form-grid" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>GST Portal Username</label>
+            <input id="sb-gst-username" placeholder="Your gst.gov.in username" />
           </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px;" id="wb-otp-hint"></div>
+          <div class="form-group">
+            <label>GSTIN <span style="color:var(--hint);font-size:11px;">(from Business Profile)</span></label>
+            <input id="sb-gstin-display" disabled style="background:var(--bg);color:var(--muted);" placeholder="Set GSTIN in Business Profile above" />
+          </div>
         </div>
-        <div id="wb-test-result" style="margin-top:10px;font-size:12px;display:none;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="sbSendOtpFromSettings()" id="sb-send-otp-btn">
+            <i class="fas fa-mobile-alt"></i> Send OTP to Connect
+          </button>
+          <button class="btn btn-success" onclick="openGSTSyncModal()">
+            <i class="fas fa-sync-alt"></i> Sync from GST Portal
+          </button>
+        </div>
+        <div id="sb-otp-row" style="display:none;margin-top:14px;">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;"><i class="fas fa-mobile-alt"></i> OTP sent. <strong>Sandbox test OTP: 123456</strong></div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="sb-otp-input" placeholder="6-digit OTP" maxlength="6"
+              style="width:180px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:16px;letter-spacing:4px;text-align:center;" />
+            <button class="btn btn-primary" onclick="sbVerifyOtpFromSettings()" id="sb-verify-btn">
+              <i class="fas fa-check"></i> Verify OTP
+            </button>
+          </div>
+        </div>
+        <div id="sb-settings-error" style="margin-top:10px;font-size:12px;color:var(--error);display:none;"></div>
       </div>
     </div>
 
@@ -2165,8 +2183,12 @@
       document.getElementById('set-business-type').value = biz.business_type || 'retail';
       document.getElementById('set-gst-scheme').value = biz.gst_scheme || 'regular';
       document.getElementById('set-city').value = biz.city || '';
-      document.getElementById('set-state-code').value = biz.state_code || '';
+      // Auto-derive state code from GSTIN first 2 digits if not set
+      const derivedState = biz.state_code || (biz.gstin ? biz.gstin.slice(0,2) : '');
+      document.getElementById('set-state-code').value = derivedState;
       document.getElementById('set-address').value = biz.address || '';
+      // Load Sandbox GST session status into settings card
+      await loadSandboxSettings();
     } catch (e) { showToast(e.message, true); }
   }
 
@@ -2221,113 +2243,81 @@
 
 
   /* ════════════════════════════════════════════
-     WHITEBOOKS GST API INTEGRATION
+     SANDBOX GST API — SETTINGS PANEL
   ════════════════════════════════════════════ */
 
-  // ── Settings: Load saved WB config ──────────────────────────────────────
-  async function loadWBConfig() {
+  // Load sandbox session status into settings card
+  async function loadSandboxSettings() {
     try {
-      const res = await apiFetch('/wb/config');
+      const biz = currentBusiness || {};
+      const gstin = biz.gstin || '';
+      const gstnEl = document.getElementById('sb-gstin-display');
+      if (gstnEl) gstnEl.value = gstin || 'Not set — fill Business Profile';
+
+      const res = await apiFetch('/sbgst/status');
       const d = res.data || {};
-      if (d.wb_client_id) {
-        document.getElementById('wb-client-id').value = d.wb_client_id || '';
-        if (document.getElementById('wb-email')) document.getElementById('wb-email').value = d.wb_email || '';
-        document.getElementById('wb-gstin').value = d.wb_gstin || '';
-        document.getElementById('wb-gst-username').value = d.wb_gst_username || '';
-        if (d.wb_einv_client_id) document.getElementById('wb-einv-client-id').value = d.wb_einv_client_id;
-        const badge = document.getElementById('wb-status-badge');
-        if (badge) { badge.textContent = d.wb_enabled ? 'Connected ✓' : 'Not configured'; badge.className = d.wb_enabled ? 'pill pill-success' : 'pill pill-warn'; }
+      const badge = document.getElementById('sandbox-status-badge');
+      const info  = document.getElementById('sandbox-session-info');
+      if (d.connected) {
+        if (badge) { badge.textContent = 'Connected ✓'; badge.className = 'pill pill-success'; }
+        if (info)  info.innerHTML = '<span style="color:var(--accent);"><i class="fas fa-check-circle"></i> Session active for <strong>' + (d.gstin || '') + '</strong> — expires in ' + (d.expires_in_minutes || '?') + ' min</span>';
+      } else {
+        if (badge) { badge.textContent = 'Not connected'; badge.className = 'pill pill-warn'; }
+        if (info)  info.innerHTML = '<span style="color:var(--muted);">No active session. Send OTP to connect.</span>';
       }
-    } catch (e) { /* not critical */ }
-  }
-
-  // ── Settings: Save WB credentials ───────────────────────────────────────
-  async function saveWBConfig() {
-    const btn = document.querySelector('#wb-settings-card .btn-primary');
-    const origText = btn.innerHTML;
-    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
-    try {
-      await apiFetch('/wb/config', {
-        method: 'POST',
-        body: JSON.stringify({
-          wb_client_id: document.getElementById('wb-client-id').value.trim(),
-          wb_client_secret: document.getElementById('wb-client-secret').value.trim(),
-          wb_gstin: document.getElementById('wb-gstin').value.trim(),
-          wb_gst_username: document.getElementById('wb-gst-username').value.trim(),
-          wb_email: document.getElementById('wb-email').value.trim(),
-          wb_einv_client_id: document.getElementById('wb-einv-client-id').value.trim() || null,
-          wb_einv_client_secret: document.getElementById('wb-einv-secret').value.trim() || null,
-        }),
-      });
-      showToast('WhiteBooks credentials saved ✓');
-      const badge = document.getElementById('wb-status-badge');
-      if (badge) { badge.textContent = 'Saved'; badge.className = 'pill pill-warn'; }
     } catch (e) {
-      showToast('Save failed: ' + e.message, 'error');
-    } finally {
-      btn.disabled = false; btn.innerHTML = origText;
+      const info = document.getElementById('sandbox-session-info');
+      if (info) info.innerHTML = '<span style="color:var(--hint);">Could not check status — verify SANDBOX_API_KEY is set in Railway.</span>';
     }
   }
 
-  // ── WhiteBooks: Send OTP (Step 1) ────────────────────────────────────────
-  let _wbTxn = ''; // store txn from Send OTP to pass to Verify OTP
-  async function wbSendOtp() {
-    const btn = document.getElementById('wb-otp-btn');
-    const result = document.getElementById('wb-test-result');
+  async function sbSendOtpFromSettings() {
+    const username = (document.getElementById('sb-gst-username')?.value || '').trim();
+    const errEl = document.getElementById('sb-settings-error');
+    errEl.style.display = 'none';
+    if (!username) { errEl.textContent = 'Enter your GST portal username first'; errEl.style.display = 'block'; return; }
+    const btn = document.getElementById('sb-send-otp-btn');
     btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending OTP…';
-    result.style.display = 'none';
     try {
-      const wbEmail = document.getElementById('wb-email')?.value.trim() || '';
-      const res = await apiFetch('/wb/otp/send', { method: 'POST', body: JSON.stringify({ email: wbEmail }) });
-      const msg = res.data?.message || 'OTP sent';
-      const sandboxOtp = res.data?.sandbox_otp;
-      _wbTxn = res.data?.txn || '';
-      // Show OTP input row
-      const otpRow = document.getElementById('wb-otp-row');
-      otpRow.style.display = 'block';
-      const hint = document.getElementById('wb-otp-hint');
-      hint.innerHTML = sandboxOtp
-        ? `<span style="color:var(--accent);">Sandbox mode: OTP is always <b>${sandboxOtp}</b></span>`
-        : 'OTP sent to your GST-registered mobile/email';
-      result.style.display = 'block';
-      result.style.color = 'var(--accent)';
-      result.innerHTML = '<i class="fas fa-info-circle"></i> ' + msg;
+      await apiFetch('/sbgst/otp/generate', { method: 'POST', body: JSON.stringify({ username }) });
+      document.getElementById('sb-otp-row').style.display = 'block';
+      document.getElementById('sb-otp-input').focus();
+      showToast('OTP sent to your registered mobile & email');
     } catch (e) {
-      result.style.display = 'block';
-      result.style.color = 'var(--danger)';
-      result.innerHTML = '<i class="fas fa-times-circle"></i> ' + (e.message || String(e));
+      errEl.textContent = e.message || 'Failed to send OTP';
+      errEl.style.display = 'block';
     } finally {
-      btn.disabled = false; btn.innerHTML = '<i class="fas fa-mobile-alt"></i> Send OTP';
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-mobile-alt"></i> Send OTP to Connect';
     }
   }
 
-  // ── WhiteBooks: Verify OTP (Step 2) ──────────────────────────────────────
-  async function wbVerifyOtp() {
-    const btn = document.getElementById('wb-verify-btn');
-    const result = document.getElementById('wb-test-result');
-    const otp = document.getElementById('wb-otp-input').value.trim();
-    if (!otp) { result.style.display='block'; result.style.color='var(--danger)'; result.innerHTML='Enter the OTP first'; return; }
+  async function sbVerifyOtpFromSettings() {
+    const otp = (document.getElementById('sb-otp-input')?.value || '').trim();
+    const errEl = document.getElementById('sb-settings-error');
+    errEl.style.display = 'none';
+    if (!otp || otp.length < 6) { errEl.textContent = 'Enter the 6-digit OTP'; errEl.style.display = 'block'; return; }
+    const btn = document.getElementById('sb-verify-btn');
     btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying…';
     try {
-      const res = await apiFetch('/wb/otp/verify', { method: 'POST', body: JSON.stringify({ otp, txn: _wbTxn }) });
-      result.style.display = 'block';
-      result.style.color = 'var(--accent)';
-      result.innerHTML = '<i class="fas fa-check-circle"></i> ' + (res.data?.message || 'Connected!');
-      const badge = document.getElementById('wb-status-badge');
-      if (badge) { badge.textContent = 'Connected ✓'; badge.className = 'pill pill-success'; }
-      document.getElementById('wb-otp-row').style.display = 'none';
-      document.getElementById('wb-otp-input').value = '';
+      await apiFetch('/sbgst/otp/verify', { method: 'POST', body: JSON.stringify({ otp }) });
+      document.getElementById('sb-otp-row').style.display = 'none';
+      document.getElementById('sb-otp-input').value = '';
+      showToast('GST session connected ✓');
+      loadSandboxSettings(); // refresh status badge
     } catch (e) {
-      result.style.display = 'block';
-      result.style.color = 'var(--danger)';
-      result.innerHTML = '<i class="fas fa-times-circle"></i> ' + (e.message || String(e));
+      errEl.textContent = e.message || 'OTP verification failed';
+      errEl.style.display = 'block';
     } finally {
       btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Verify OTP';
     }
   }
 
-  // ── Settings: Test WB connection (legacy button, kept for compatibility) ──
-  async function testWBConfig() { await wbSendOtp(); }
+  // Legacy stubs so no JS errors if old references survive
+  async function loadWBConfig() { await loadSandboxSettings(); }
+  async function saveWBConfig() {}
+  async function wbSendOtp() {}
+  async function wbVerifyOtp() {}
+  async function testWBConfig() {}
 
   // ═══════════════════════════════════════════════════════════════════════════
   // GST PORTAL SYNC (Sandbox.co.in)
