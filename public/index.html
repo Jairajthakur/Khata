@@ -784,6 +784,7 @@
           <div class="return-meta" id="gst3b-meta"></div>
           <div class="return-actions">
             <button class="btn btn-sm btn-primary" id="gst3b-file-btn" onclick="openGSTR3BModal()"><i class="fas fa-paper-plane"></i> File Now</button>
+            <button class="btn btn-sm btn-success" onclick="openGSTSyncModal()" title="Auto-import invoices &amp; expenses from GST portal"><i class="fas fa-sync-alt"></i> Sync Portal</button>
             <button class="btn btn-sm btn-success" onclick="fetchGSTR2B()" title="Auto-import ITC from GST Portal"><i class="fas fa-cloud-download-alt"></i> Fetch 2B</button>
             <button class="btn btn-sm" onclick="goPage('gst')"><i class="fas fa-eye"></i> Preview</button>
           </div>
@@ -1135,6 +1136,77 @@
       <button class="btn" onclick="closeModal('file-gstr3b-modal')">Cancel</button>
       <button class="btn btn-primary" id="gstr3b-send-otp-btn" onclick="sendGSTOTP()"><i class="fas fa-mobile-alt"></i> Send OTP</button>
       <button class="btn btn-primary" id="gstr3b-submit-btn" onclick="fileGSTR3B()" style="display:none;"><i class="fas fa-paper-plane"></i> Submit via GSP</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════ GST PORTAL SYNC MODAL ════════ -->
+<div class="modal-overlay" id="gst-sync-modal">
+  <div class="modal-box" style="max-width:480px;">
+    <div class="modal-title"><i class="fas fa-sync-alt" style="color:var(--accent)"></i> Sync from GST Portal</div>
+
+    <!-- Step 1: Period + username -->
+    <div id="gst-sync-step1">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6;">
+        Pulls your real invoices and supplier purchases from the GST portal via Sandbox.co.in GSP.
+        Your parties, invoices, and expenses are auto-created — duplicates are skipped.
+      </div>
+      <div class="form-group">
+        <label>Period (MM-YYYY)</label>
+        <input id="sync-period" placeholder="e.g. 06-2025" maxlength="7" />
+      </div>
+      <div class="form-group">
+        <label>GST Portal Username</label>
+        <input id="sync-username" placeholder="Your gst.gov.in login username" />
+        <div style="font-size:11px;color:var(--hint);margin-top:4px;">
+          <i class="fas fa-info-circle"></i> First enable API access on gst.gov.in → My Profile → Manage API Access
+        </div>
+      </div>
+      <div class="auth-error" id="sync-error-step1"></div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal('gst-sync-modal')">Cancel</button>
+        <button class="btn btn-primary" id="sync-send-otp-btn" onclick="syncSendOTP()">
+          <i class="fas fa-mobile-alt"></i> Send OTP to Mobile
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: Enter OTP -->
+    <div id="gst-sync-step2" style="display:none;">
+      <div style="background:var(--info-lt);border-radius:var(--radius);padding:12px;font-size:13px;color:var(--info);margin-bottom:16px;">
+        <i class="fas fa-mobile-alt"></i> OTP sent to your GST registered mobile &amp; email.
+        <br><strong style="font-size:11px;color:var(--hint);">Sandbox test OTP: 123456</strong>
+      </div>
+      <div class="form-group">
+        <label>Enter OTP</label>
+        <input id="sync-otp-input" placeholder="6-digit OTP" maxlength="6"
+          style="letter-spacing:6px;font-size:22px;text-align:center;font-weight:700;" />
+      </div>
+      <div class="auth-error" id="sync-error-step2"></div>
+      <div class="modal-footer">
+        <button class="btn" onclick="syncGoToStep1()"><i class="fas fa-arrow-left"></i> Back</button>
+        <button class="btn btn-primary" id="sync-verify-btn" onclick="syncVerifyOTP()">
+          <i class="fas fa-check"></i> Verify &amp; Start Sync
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 3: Syncing progress -->
+    <div id="gst-sync-step3" style="display:none;text-align:center;padding:20px 0;">
+      <div style="font-size:36px;margin-bottom:12px;"><i class="fas fa-sync-alt fa-spin" style="color:var(--accent);"></i></div>
+      <div style="font-weight:600;font-size:15px;margin-bottom:6px;">Syncing from GST Portal…</div>
+      <div style="color:var(--muted);font-size:13px;" id="sync-progress-text">Fetching GSTR-1 (your sales)…</div>
+    </div>
+
+    <!-- Step 4: Done -->
+    <div id="gst-sync-step4" style="display:none;">
+      <div style="font-size:36px;text-align:center;margin-bottom:12px;"><i class="fas fa-check-circle" style="color:var(--accent);"></i></div>
+      <div style="font-weight:700;font-size:16px;text-align:center;margin-bottom:16px;">Sync Complete!</div>
+      <div id="sync-result-body" style="font-size:13px;line-height:1.9;"></div>
+      <div class="modal-footer" style="margin-top:16px;">
+        <button class="btn btn-primary" onclick="closeSyncModal()">Done</button>
+      </div>
     </div>
   </div>
 </div>
@@ -2256,6 +2328,149 @@
 
   // ── Settings: Test WB connection (legacy button, kept for compatibility) ──
   async function testWBConfig() { await wbSendOtp(); }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GST PORTAL SYNC (Sandbox.co.in)
+  // Flow: open modal → enter period/username → OTP → verify → sync → results
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function openGSTSyncModal() {
+    // Pre-fill period with last month
+    const now   = new Date();
+    const prev  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const mm    = String(prev.getMonth() + 1).padStart(2, '0');
+    const yyyy  = prev.getFullYear();
+    document.getElementById('sync-period').value = `${mm}-${yyyy}`;
+    document.getElementById('sync-username').value = '';
+    document.getElementById('sync-otp-input').value = '';
+    document.getElementById('sync-error-step1').textContent = '';
+    document.getElementById('sync-error-step2').textContent = '';
+    syncGoToStep(1);
+    openModal('gst-sync-modal');
+  }
+
+  function syncGoToStep(n) {
+    [1, 2, 3, 4].forEach(i => {
+      const el = document.getElementById('gst-sync-step' + i);
+      if (el) el.style.display = i === n ? '' : 'none';
+    });
+  }
+  function syncGoToStep1() { syncGoToStep(1); }
+
+  async function syncSendOTP() {
+    const period   = (document.getElementById('sync-period').value || '').trim();
+    const username = (document.getElementById('sync-username').value || '').trim();
+    const errEl    = document.getElementById('sync-error-step1');
+    errEl.textContent = '';
+
+    if (!period.match(/^\d{2}-\d{4}$/)) {
+      errEl.textContent = 'Period must be MM-YYYY e.g. 06-2025'; return;
+    }
+    if (!username) {
+      errEl.textContent = 'GST portal username is required'; return;
+    }
+
+    const btn = document.getElementById('sync-send-otp-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending OTP…';
+
+    try {
+      await apiFetch('/sbgst/otp/generate', {
+        method: 'POST',
+        body: JSON.stringify({ username }),
+      });
+      syncGoToStep(2);
+      document.getElementById('sync-otp-input').focus();
+    } catch (e) {
+      errEl.textContent = e.message || 'Failed to send OTP';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-mobile-alt"></i> Send OTP to Mobile';
+    }
+  }
+
+  async function syncVerifyOTP() {
+    const otp   = (document.getElementById('sync-otp-input').value || '').trim();
+    const errEl = document.getElementById('sync-error-step2');
+    errEl.textContent = '';
+
+    if (!otp || otp.length < 6) {
+      errEl.textContent = 'Enter the 6-digit OTP'; return;
+    }
+
+    const btn = document.getElementById('sync-verify-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying…';
+
+    try {
+      await apiFetch('/sbgst/otp/verify', {
+        method: 'POST',
+        body: JSON.stringify({ otp }),
+      });
+      // OTP verified — now run the sync
+      syncGoToStep(3);
+      await syncRunPull();
+    } catch (e) {
+      errEl.textContent = e.message || 'OTP verification failed';
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check"></i> Verify & Start Sync';
+    }
+  }
+
+  async function syncRunPull() {
+    const period = (document.getElementById('sync-period').value || '').trim();
+    const prog   = document.getElementById('sync-progress-text');
+    prog.textContent = 'Fetching GSTR-1 (your sales) and GSTR-2A (supplier purchases)…';
+
+    try {
+      const res = await apiFetch('/sbgst/sync', {
+        method: 'POST',
+        body: JSON.stringify({ period }),
+      });
+      const d = res.data || res;
+      syncGoToStep(4);
+
+      // Build a neat result summary
+      const g1  = d.gstr1  || {};
+      const g2a = d.gstr2a || {};
+      let html = '';
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border2);">
+        <i class="fas fa-file-invoice" style="color:var(--accent);width:18px;text-align:center;"></i>
+        <div><strong>GSTR-1 (Sales Invoices)</strong><br>
+          <span style="color:var(--muted);">
+            ${g1.invoices_created} created &nbsp;•&nbsp; ${g1.invoices_skipped} already existed
+            ${g1.error ? '<br><span style="color:var(--error);">⚠ ' + g1.error + '</span>' : ''}
+          </span>
+        </div>
+      </div>`;
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border2);">
+        <i class="fas fa-receipt" style="color:var(--info);width:18px;text-align:center;"></i>
+        <div><strong>GSTR-2A (Purchase Expenses)</strong><br>
+          <span style="color:var(--muted);">
+            ${g2a.expenses_created} created &nbsp;•&nbsp; ${g2a.expenses_skipped} already existed
+            ${g2a.parties_created ? `&nbsp;•&nbsp; ${g2a.parties_created} new suppliers added` : ''}
+            ${g2a.error ? '<br><span style="color:var(--error);">⚠ ' + g2a.error + '</span>' : ''}
+          </span>
+        </div>
+      </div>`;
+      html += `<div style="padding:10px 0;color:var(--muted);font-size:12px;">
+        <i class="fas fa-info-circle"></i> Existing records were skipped to avoid duplicates.
+      </div>`;
+      document.getElementById('sync-result-body').innerHTML = html;
+
+      // Refresh pages that may have new data
+      loadGST();
+      if (typeof loadDashboard === 'function') loadDashboard();
+    } catch (e) {
+      syncGoToStep(2);
+      document.getElementById('sync-error-step2').textContent = 'Sync failed: ' + (e.message || 'Unknown error');
+    }
+  }
+
+  function closeSyncModal() {
+    closeModal('gst-sync-modal');
+    syncGoToStep(1);
+  }
 
   // ── GST Filing: Fetch GSTR-2B (auto-import ITC) ─────────────────────────
   async function fetchGSTR2B() {
