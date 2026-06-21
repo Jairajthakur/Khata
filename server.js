@@ -18,6 +18,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const whatsappRoutes = require('./routes/whatsapp');
 const khataRoutes = require('./routes/khata');
 const whitebooksRoutes = require('./routes/whitebooks');
+const sandboxGstRoutes = require('./routes/sandboxgst');
 
 const app = express();
 
@@ -114,6 +115,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/khata', khataRoutes);
 app.use('/api/wb', whitebooksRoutes);
+app.use('/api/sbgst', sandboxGstRoutes);
 
 // Serve static frontend
 app.use(express.static(path.join(__dirname, 'public')));
