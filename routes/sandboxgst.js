@@ -52,15 +52,49 @@ const SANDBOX_TIMEOUT_MS = 20000;
 // { [businessId]: { auth_token, expiry } }
 const tokenStore = {};
 
+// ─── Platform-level access token cache ───────────────────────────────────────
+// Sandbox.co.in requires POST /authenticate → Bearer token before all API calls
+let platformToken = null;
+let platformTokenExpiry = 0;
+
+async function getPlatformToken() {
+  if (platformToken && Date.now() < platformTokenExpiry) return platformToken;
+
+  const res = await fetch(`${SANDBOX_BASE}/authenticate`, {
+    method: 'POST',
+    headers: {
+      'x-api-key': process.env.SANDBOX_API_KEY,
+      'x-api-secret': process.env.SANDBOX_API_SECRET,
+      'x-api-version': '1.0',
+      'Content-Type': 'application/json',
+    },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const msg = data?.message || data?.error || `HTTP ${res.status}`;
+    throw new Error(`Sandbox auth failed: ${msg}`);
+  }
+  // Token returned as data.access_token or data.data.access_token
+  const token = data?.access_token || data?.data?.access_token || data?.token;
+  if (!token) throw new Error(`Sandbox auth: no access_token in response: ${JSON.stringify(data).slice(0, 200)}`);
+
+  platformToken = token;
+  // Tokens are typically valid 24h; refresh after 23h to be safe
+  platformTokenExpiry = Date.now() + 23 * 60 * 60 * 1000;
+  return platformToken;
+}
+
 // ─── All routes require auth ──────────────────────────────────────────────────
 router.use(authenticate, requireBusiness);
 
-// ─── Build common headers ─────────────────────────────────────────────────────
-function buildHeaders(extraHeaders = {}) {
+// ─── Build common headers (requires platform token) ───────────────────────────
+async function buildHeaders(extraHeaders = {}) {
+  const accessToken = await getPlatformToken();
   return {
     'x-api-key': process.env.SANDBOX_API_KEY,
     'x-api-secret': process.env.SANDBOX_API_SECRET,
     'x-api-version': '1.0',
+    'Authorization': `Bearer ${accessToken}`,
     'Content-Type': 'application/json',
     ...extraHeaders,
   };
@@ -73,6 +107,10 @@ async function sbFetch(path, options = {}) {
   const timer = setTimeout(() => controller.abort(), SANDBOX_TIMEOUT_MS);
 
   try {
+    // buildHeaders is now async — resolve it if not already done by caller
+    if (options.headers && options.headers.then) {
+      options.headers = await options.headers;
+    }
     const res = await fetch(url, { ...options, signal: controller.signal });
     const data = await res.json();
     if (!res.ok) {
@@ -104,6 +142,9 @@ async function getBusinessCreds(businessId) {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/otp/generate', async (req, res, next) => {
   try {
+    if (!process.env.SANDBOX_API_KEY || !process.env.SANDBOX_API_SECRET) {
+      return res.status(500).json({ error: 'Sandbox API credentials not configured. Add SANDBOX_API_KEY and SANDBOX_API_SECRET in Railway environment variables.' });
+    }
     const { username } = req.body;
     if (!username) return res.status(400).json({ error: 'GST portal username is required' });
 
@@ -111,7 +152,7 @@ router.post('/otp/generate', async (req, res, next) => {
 
     const data = await sbFetch('/gst/taxpayer/otp', {
       method: 'POST',
-      headers: buildHeaders(),
+      headers: await buildHeaders(),
       body: JSON.stringify({
         gstin: biz.gstin,
         username,
@@ -150,7 +191,7 @@ router.post('/otp/verify', async (req, res, next) => {
 
     const data = await sbFetch('/gst/taxpayer/authenticate', {
       method: 'POST',
-      headers: buildHeaders(),
+      headers: await buildHeaders(),
       body: JSON.stringify({
         gstin: pending.pending_gstin,
         username: pending.pending_username,
@@ -210,7 +251,7 @@ router.get('/gstin/:gstin', async (req, res, next) => {
     const { gstin } = req.params;
     const data = await sbFetch(`/gst/taxpayer/${gstin}`, {
       method: 'GET',
-      headers: buildHeaders(),
+      headers: await buildHeaders(),
     });
     ok(res, data);
   } catch (err) { next(err); }
@@ -310,14 +351,14 @@ router.post('/gstr1/file', async (req, res, next) => {
     // Save to GST portal via Sandbox API
     const saveData = await sbFetch('/gst/taxpayer/returns/gstr1', {
       method: 'POST',
-      headers: buildHeaders({ 'x-auth-token': stored.auth_token }),
+      headers: await buildHeaders({ 'x-auth-token': stored.auth_token }),
       body: JSON.stringify(gstr1Payload),
     });
 
     // File the return
     const fileData = await sbFetch('/gst/taxpayer/returns/gstr1/file', {
       method: 'POST',
-      headers: buildHeaders({ 'x-auth-token': stored.auth_token }),
+      headers: await buildHeaders({ 'x-auth-token': stored.auth_token }),
       body: JSON.stringify({ gstin: stored.gstin, fp: ret_period }),
     });
 
@@ -439,14 +480,14 @@ router.post('/gstr3b/file', async (req, res, next) => {
     // Save GSTR-3B data
     await sbFetch('/gst/taxpayer/returns/gstr3b', {
       method: 'POST',
-      headers: buildHeaders({ 'x-auth-token': stored.auth_token }),
+      headers: await buildHeaders({ 'x-auth-token': stored.auth_token }),
       body: JSON.stringify(gstr3bPayload),
     });
 
     // File GSTR-3B
     const fileData = await sbFetch('/gst/taxpayer/returns/gstr3b/file', {
       method: 'POST',
-      headers: buildHeaders({ 'x-auth-token': stored.auth_token }),
+      headers: await buildHeaders({ 'x-auth-token': stored.auth_token }),
       body: JSON.stringify({ gstin: stored.gstin, ret_period }),
     });
 
@@ -652,7 +693,7 @@ router.post('/sync', async (req, res, next) => {
         `/gst/taxpayer/returns/gstr1?gstin=${stored.gstin}&ret_period=${ret_period}`,
         {
           method: 'GET',
-          headers: buildHeaders({ 'x-auth-token': stored.auth_token }),
+          headers: await buildHeaders({ 'x-auth-token': stored.auth_token }),
         }
       );
     } catch (e) {
@@ -821,7 +862,7 @@ router.post('/sync', async (req, res, next) => {
         `/gst/taxpayer/returns/gstr2a?gstin=${stored.gstin}&ret_period=${ret_period}`,
         {
           method: 'GET',
-          headers: buildHeaders({ 'x-auth-token': stored.auth_token }),
+          headers: await buildHeaders({ 'x-auth-token': stored.auth_token }),
         }
       );
     } catch (e) {
