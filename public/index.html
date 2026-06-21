@@ -1100,8 +1100,20 @@
         </select>
       </div>
       <div class="form-group"><label>Date</label><input type="date" id="inv-date" /></div>
-      <div class="form-group"><label>Party Name</label><input id="inv-party" placeholder="Customer / supplier name" /></div>
-      <div class="form-group"><label>Party GSTIN (optional)</label><input id="inv-gstin" placeholder="29AABCX1234Y1ZK" /></div>
+      <div class="form-group">
+        <label>Party Name <span id="inv-party-hint" style="font-size:11px;color:var(--accent);display:none;"><i class="fas fa-magic"></i> auto-filled</span></label>
+        <input id="inv-party" placeholder="Enter GSTIN above to auto-fill, or type name" />
+      </div>
+      <div class="form-group">
+        <label>Party GSTIN <span style="font-size:11px;color:var(--hint);">(auto-fills name & address)</span></label>
+        <div style="position:relative;">
+          <input id="inv-gstin" placeholder="29AABCX1234Y1ZK" maxlength="15"
+            oninput="this.value=this.value.toUpperCase()"
+            onblur="autoFillFromGSTIN()"
+            style="padding-right:80px;" />
+          <span id="gstin-lookup-badge" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;display:none;"></span>
+        </div>
+      </div>
       <div class="form-group"><label>Item / Service Description</label><input id="inv-item" placeholder="e.g. Cotton Fabric" /></div>
       <div class="form-group"><label>Quantity</label><input type="number" id="inv-qty" placeholder="1" value="1" /></div>
       <div class="form-group"><label>Rate (₹)</label><input type="number" id="inv-rate" placeholder="0" oninput="calcInvoice()" /></div>
@@ -1892,11 +1904,88 @@
     } catch (e) { showToast(e.message, true); }
   }
 
+  // ─── Auto-fill party name + place of supply from GSTIN ───────────────────
+  // Called onblur of the GSTIN field in the New Invoice modal.
+  // Uses GET /api/sbgst/gstin/:gstin (no auth token needed — public lookup).
+  async function autoFillFromGSTIN() {
+    const gstin = (document.getElementById('inv-gstin')?.value || '').trim().toUpperCase();
+    const badge = document.getElementById('gstin-lookup-badge');
+    const partyInput = document.getElementById('inv-party');
+    const hintEl = document.getElementById('inv-party-hint');
+    const placeEl = document.getElementById('inv-place');
+
+    if (!gstin || gstin.length !== 15) return; // nothing to look up
+
+    badge.style.display = 'inline';
+    badge.style.color = 'var(--muted)';
+    badge.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+    try {
+      const res = await apiFetch('/sbgst/gstin/' + gstin);
+      const d = res.data?.data || res.data || {};
+
+      // Extract business name — Sandbox/GSTN returns different field names
+      const name = d.tradeNam || d.tradeName || d.lgnm || d.legalName || '';
+      const stateCode = gstin.slice(0, 2); // first 2 digits of GSTIN = state code
+
+      if (name && partyInput) {
+        // Only auto-fill if user hasn't already typed a name
+        if (!partyInput.value.trim()) {
+          partyInput.value = name;
+          if (hintEl) hintEl.style.display = 'inline';
+        }
+      }
+
+      // Auto-set Place of Supply to buyer's state
+      if (placeEl && stateCode) {
+        // Try to select matching option; if not found, add it temporarily
+        let found = false;
+        for (const opt of placeEl.options) {
+          if (opt.value === stateCode) { opt.selected = true; found = true; break; }
+        }
+        if (!found) {
+          const stateNames = {
+            '01':'Jammu & Kashmir','02':'Himachal Pradesh','03':'Punjab','04':'Chandigarh',
+            '05':'Uttarakhand','06':'Haryana','07':'Delhi','08':'Rajasthan','09':'Uttar Pradesh',
+            '10':'Bihar','11':'Sikkim','12':'Arunachal Pradesh','13':'Nagaland','14':'Manipur',
+            '15':'Mizoram','16':'Tripura','17':'Meghalaya','18':'Assam','19':'West Bengal',
+            '20':'Jharkhand','21':'Odisha','22':'Chhattisgarh','23':'Madhya Pradesh',
+            '24':'Gujarat','25':'Daman & Diu','26':'Dadra & Nagar Haveli','27':'Maharashtra',
+            '28':'Andhra Pradesh (old)','29':'Karnataka','30':'Goa','31':'Lakshadweep',
+            '32':'Kerala','33':'Tamil Nadu','34':'Puducherry','35':'Andaman & Nicobar',
+            '36':'Telangana','37':'Andhra Pradesh','38':'Ladakh','97':'Other Territory'
+          };
+          const opt = document.createElement('option');
+          opt.value = stateCode;
+          opt.text = (stateNames[stateCode] || 'State ' + stateCode) + ' (' + stateCode + ')';
+          opt.selected = true;
+          placeEl.appendChild(opt);
+        }
+      }
+
+      badge.style.color = 'var(--accent)';
+      badge.innerHTML = '<i class="fas fa-check-circle"></i> Verified';
+      setTimeout(() => { badge.style.display = 'none'; }, 3000);
+    } catch (e) {
+      // If lookup fails (no session, invalid GSTIN), just show a soft warning
+      // but still let the user proceed manually
+      badge.style.color = 'var(--warn)';
+      badge.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Unverified';
+      setTimeout(() => { badge.style.display = 'none'; }, 3000);
+    }
+  }
+
   async function resolvePartyByName(name, partyType, gstin) {
     try {
       const res = await apiFetch('/parties?search=' + encodeURIComponent(name));
-      const match = (res.data || []).find(p => p.name.toLowerCase() === name.toLowerCase());
-      if (match) return match.id;
+      const match = (res.data || []).find(p => p.name.toLowerCase() === name.toLowerCase() || (gstin && p.gstin === gstin));
+      if (match) {
+        // Update GSTIN on existing party if we now have one
+        if (gstin && !match.gstin) {
+          try { await apiFetch('/parties/' + match.id, { method: 'PATCH', body: JSON.stringify({ gstin }) }); } catch(e) {}
+        }
+        return match.id;
+      }
     } catch (e) { /* fall through to create */ }
     const created = await apiFetch('/parties', { method: 'POST', body: JSON.stringify({ name, party_type: partyType, gstin: gstin || null }) });
     return created.data.id;
@@ -1916,6 +2005,10 @@
 
   function resetInvoiceForm() {
     ['inv-party', 'inv-gstin', 'inv-item', 'inv-rate'].forEach(id => document.getElementById(id).value = '');
+    const hintEl = document.getElementById('inv-party-hint');
+    if (hintEl) hintEl.style.display = 'none';
+    const badge = document.getElementById('gstin-lookup-badge');
+    if (badge) badge.style.display = 'none';
     document.getElementById('inv-qty').value = '1';
     document.getElementById('inv-taxable').textContent = '—';
     document.getElementById('inv-tax').textContent = '—';
