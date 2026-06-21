@@ -231,24 +231,40 @@ router.post('/otp/send', async (req, res, next) => {
     const email = req.body.email || creds.wb_email || req.user?.email || '';
     console.log('[WhiteBooks] Sending OTP for email:', email);
 
+    // Make raw fetch to capture txn even from error-shaped responses
+    const otpUrl = new URL(`${WB_BASE}/authentication/otprequest`);
+    otpUrl.searchParams.set('email', email);
     let data = {};
     try {
-      data = await wbGet('/authentication/otprequest', wbHeaders(creds), { email });
+      const otpRes = await fetch(otpUrl.toString(), fetchOpts({ headers: wbHeaders(creds) }));
+      const otpText = await otpRes.text();
+      console.log('[WhiteBooks] OTP raw response:', otpText.slice(0, 500));
+      try { data = JSON.parse(otpText); } catch (_) { data = {}; }
     } catch (otpErr) {
-      // WhiteBooks sandbox may return an error-shaped response for OTP request
-      // but still issue a valid txn — log and continue
-      console.warn('[WhiteBooks] OTP request warning:', otpErr.message);
+      console.warn('[WhiteBooks] OTP request network error:', otpErr.message);
       data = {};
     }
 
-    console.log('[WhiteBooks] OTP response:', JSON.stringify(data).slice(0, 300));
+    // txn can be at many levels — search exhaustively
+    const txn =
+      data.txn ||
+      data.data?.txn ||
+      data.response?.txn ||
+      data.result?.txn ||
+      data.status_desc?.txn ||
+      (typeof data.data === 'string' ? null : null) ||
+      '';
 
-    // txn can be at different levels depending on WhiteBooks API version
-    const txn = data.txn || data.data?.txn || data.response?.txn || data.result?.txn || '';
+    console.log('[WhiteBooks] Extracted txn:', txn, 'from response keys:', Object.keys(data));
 
-    // In sandbox, txn may be empty — use a placeholder so the flow can continue
+    // Never use a fake txn — if txn is empty, fail clearly
     const isSandbox = (process.env.WHITEBOOKS_ENV || 'sandbox') !== 'production';
-    const effectiveTxn = txn || (isSandbox ? 'SANDBOX_TXN' : '');
+    if (!txn) {
+      // OTP request failed — surface the actual error
+      const errMsg = data.status_desc || data.message || data.error?.message || JSON.stringify(data);
+      throw new Error(`OTP request failed: ${errMsg}`);
+    }
+    const effectiveTxn = txn;
 
     tokenStore[req.business.id] = {
       ...(tokenStore[req.business.id] || {}),
@@ -283,11 +299,11 @@ router.post('/otp/verify', async (req, res, next) => {
 
     const stored = tokenStore[req.business.id] || {};
     const isSbx = (process.env.WHITEBOOKS_ENV || 'sandbox') !== 'production';
-    const txn = stored.txn || req.body.txn || (isSbx ? 'SANDBOX_TXN' : '');
+    const txn = stored.txn || req.body.txn || '';
 
-    console.log('[WhiteBooks] Verify OTP — stored:', JSON.stringify(stored), 'txn:', txn);
+    console.log('[WhiteBooks] Verify OTP — stored txn:', txn, 'body txn:', req.body.txn);
 
-    if (!txn && !isSbx) {
+    if (!txn) {
       return res.status(400).json({ error: 'No active OTP session. Please click Send OTP first.' });
     }
 
