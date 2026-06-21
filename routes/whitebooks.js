@@ -290,13 +290,35 @@ router.post('/otp/verify', async (req, res, next) => {
       { email: email || req.user?.email || '', otp }
     );
 
-    const authtoken = data.authtoken || data.data?.authtoken;
-    if (!authtoken) throw new Error(wbStr(data.message) || 'Auth token not returned by WhiteBooks');
+    console.log('[WhiteBooks] authtoken response:', JSON.stringify(data).slice(0, 500));
 
-    // Store authtoken — valid for 6 hours per WhiteBooks docs
+    // WhiteBooks returns txn as the session token for all subsequent API calls
+    // The response contains a new txn (session txn) which replaces the OTP txn
+    const authtoken =
+      data.authtoken ||
+      data.auth_token ||
+      data.token ||
+      data.data?.authtoken ||
+      data.data?.auth_token ||
+      data.data?.token ||
+      data.result?.authtoken ||
+      // Per WhiteBooks OpenAPI spec: subsequent calls use 'txn' header
+      // So if they return a new txn after auth, that IS the session token
+      data.txn ||
+      data.data?.txn ||
+      // If the response itself looks valid (has status/message fields), use the OTP txn as session
+      (data.status === 1 || data.errorCode === '0' || data.sts === 'ACT' ? txn : null);
+
+    if (!authtoken) {
+      throw new Error(
+        `Auth token not returned by WhiteBooks. Full response: ${JSON.stringify(data).slice(0, 200)}`
+      );
+    }
+
+    // Store session — valid for 6 hours
     tokenStore[req.business.id] = {
       authtoken,
-      txn,
+      txn: authtoken, // txn and authtoken may be the same in WhiteBooks
       expiry: Date.now() + 6 * 60 * 60 * 1000,
     };
 
