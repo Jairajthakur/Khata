@@ -560,4 +560,379 @@ router.get('/returns', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/sbgst/sync
+// Body: { period } — format: MM-YYYY e.g. "06-2025"
+//
+// Full GST Portal Sync — fetches from Sandbox.co.in:
+//   • GSTR-1 (your outward sales) → auto-creates parties + sale invoices
+//   • GSTR-2A (inward purchases from suppliers) → auto-creates parties + expenses
+//
+// Requires active auth token (call /otp/generate → /otp/verify first).
+// Safe to call multiple times — uses ON CONFLICT to skip duplicates.
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/sync', async (req, res, next) => {
+  const { getClient } = require('../config/db');
+  const client = await getClient();
+  try {
+    const { period } = req.body;
+    if (!period) return res.status(400).json({ error: 'period required (MM-YYYY e.g. 06-2025)' });
+
+    const stored = tokenStore[req.business.id];
+    if (!stored?.auth_token || stored.expiry <= Date.now()) {
+      return res.status(401).json({
+        error: 'GST session expired or not started.',
+        action: 'Call POST /api/sbgst/otp/generate then POST /api/sbgst/otp/verify',
+      });
+    }
+
+    const [month, year] = period.split('-');
+    const ret_period = `${month}${year}`; // MMYYYY for Sandbox API
+    const biz = await getBusinessCreds(req.business.id);
+
+    await client.query('BEGIN');
+
+    // ── Helper: upsert a party by GSTIN (or by name if no GSTIN) ──────────
+    async function upsertParty({ name, gstin, mobile, address, state_code, party_type }) {
+      if (gstin) {
+        // Try to find by GSTIN first
+        const existing = await client.query(
+          `SELECT id FROM parties WHERE business_id=$1 AND gstin=$2 LIMIT 1`,
+          [req.business.id, gstin]
+        );
+        if (existing.rows.length) return existing.rows[0].id;
+        // Insert new
+        const inserted = await client.query(
+          `INSERT INTO parties (business_id, name, gstin, mobile, address, state_code, party_type, opening_balance)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,0) RETURNING id`,
+          [req.business.id, name || gstin, gstin, mobile || null, address || null, state_code || null, party_type]
+        );
+        return inserted.rows[0].id;
+      } else {
+        // No GSTIN — match by exact name
+        const existing = await client.query(
+          `SELECT id FROM parties WHERE business_id=$1 AND name ILIKE $2 LIMIT 1`,
+          [req.business.id, name]
+        );
+        if (existing.rows.length) return existing.rows[0].id;
+        const inserted = await client.query(
+          `INSERT INTO parties (business_id, name, party_type, opening_balance)
+           VALUES ($1,$2,$3,0) RETURNING id`,
+          [req.business.id, name, party_type]
+        );
+        return inserted.rows[0].id;
+      }
+    }
+
+    // ── Helper: parse DD-MM-YYYY or DDMMYYYY → YYYY-MM-DD ─────────────────
+    function parseGSTDate(raw) {
+      if (!raw) return new Date().toISOString().split('T')[0];
+      if (/^\d{8}$/.test(raw)) {
+        // DDMMYYYY
+        return `${raw.slice(4)}-${raw.slice(2, 4)}-${raw.slice(0, 2)}`;
+      }
+      if (raw.includes('-') && raw.length === 10) {
+        const [d, m, y] = raw.split('-');
+        if (y && m && d) return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+      return new Date().toISOString().split('T')[0];
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // PART 1: GSTR-1 — fetch YOUR outward sales from GST portal
+    // API: GET /gst/taxpayer/returns/gstr1?gstin=&ret_period=
+    // ────────────────────────────────────────────────────────────────────────
+    let gstr1Data = null;
+    let gstr1Error = null;
+    let invoicesCreated = 0;
+    let invoicesSkipped = 0;
+
+    try {
+      gstr1Data = await sbFetch(
+        `/gst/taxpayer/returns/gstr1?gstin=${stored.gstin}&ret_period=${ret_period}`,
+        {
+          method: 'GET',
+          headers: buildHeaders({ 'x-auth-token': stored.auth_token }),
+        }
+      );
+    } catch (e) {
+      gstr1Error = e.message;
+    }
+
+    if (gstr1Data) {
+      // GSTR-1 B2B invoices (GST-registered buyers)
+      const b2bEntries = gstr1Data?.data?.b2b || gstr1Data?.b2b || [];
+      for (const buyer of b2bEntries) {
+        const buyerGstin = buyer.ctin;
+        const buyerName  = buyer.trdnm || buyer.tradeName || buyerGstin;
+        const stateCode  = buyerGstin ? buyerGstin.slice(0, 2) : null;
+
+        const partyId = await upsertParty({
+          name: buyerName,
+          gstin: buyerGstin,
+          state_code: stateCode,
+          party_type: 'customer',
+        });
+
+        const invoices = buyer.inv || [];
+        for (const inv of invoices) {
+          const invoiceNumber = inv.inum;
+          const invoiceDate   = parseGSTDate(inv.idt);
+          const totalAmount   = parseFloat(inv.val || 0);
+          const placeOfSupply = inv.pos || stateCode || biz.state_code;
+          const isIgst        = placeOfSupply !== biz.state_code;
+
+          // Compute tax from items
+          let taxableAmount = 0, igst = 0, cgst = 0, sgst = 0;
+          const items = inv.itms || [];
+          items.forEach(itm => {
+            const d = itm.itm_det || itm;
+            taxableAmount += parseFloat(d.txval || 0);
+            igst          += parseFloat(d.iamt  || 0);
+            cgst          += parseFloat(d.camt  || 0);
+            sgst          += parseFloat(d.samt  || 0);
+          });
+          const totalTax = round2(igst + cgst + sgst);
+
+          // Skip if invoice_number already exists for this business
+          const dup = await client.query(
+            `SELECT id FROM invoices WHERE business_id=$1 AND invoice_number=$2 LIMIT 1`,
+            [req.business.id, invoiceNumber]
+          );
+          if (dup.rows.length) { invoicesSkipped++; continue; }
+
+          const invRes = await client.query(
+            `INSERT INTO invoices
+               (business_id, party_id, invoice_number, invoice_type, invoice_date,
+                place_of_supply, is_igst, subtotal, discount_amount, taxable_amount,
+                igst_amount, cgst_amount, sgst_amount, total_tax, total_amount, status, notes)
+             VALUES ($1,$2,$3,'sale',$4,$5,$6,$7,0,$8,$9,$10,$11,$12,$13,'unpaid','Synced from GST portal')
+             RETURNING id`,
+            [
+              req.business.id, partyId, invoiceNumber, invoiceDate,
+              placeOfSupply, isIgst,
+              totalAmount, taxableAmount,
+              igst, cgst, sgst, totalTax,
+              totalAmount,
+            ]
+          );
+          const newInvId = invRes.rows[0].id;
+
+          // Insert a single line item summarising the invoice
+          if (items.length > 0) {
+            const d = items[0].itm_det || items[0];
+            await client.query(
+              `INSERT INTO invoice_items
+                 (invoice_id, description, quantity, unit, rate, taxable_amount,
+                  gst_rate, igst_amount, cgst_amount, sgst_amount, total_amount)
+               VALUES ($1,$2,1,'pcs',$3,$4,$5,$6,$7,$8,$9)`,
+              [
+                newInvId,
+                inv.itm?.[0]?.itm_det?.nm || 'GST Portal Item',
+                taxableAmount,
+                taxableAmount,
+                parseFloat(d.rt || 18),
+                parseFloat(d.iamt || 0),
+                parseFloat(d.camt || 0),
+                parseFloat(d.samt || 0),
+                totalAmount,
+              ]
+            );
+          }
+
+          // Khata credit entry
+          await client.query(
+            `INSERT INTO khata_entries
+               (business_id, party_id, entry_date, entry_type, amount, description, reference_type, reference_id)
+             VALUES ($1,$2,$3,'credit',$4,$5,'invoice',$6)`,
+            [req.business.id, partyId, invoiceDate, totalAmount, `GST Sync — ${invoiceNumber}`, newInvId]
+          );
+
+          invoicesCreated++;
+        }
+      }
+
+      // GSTR-1 B2CS (unregistered buyers) — create a single "B2C Sales" party entry
+      const b2cs = gstr1Data?.data?.b2cs || gstr1Data?.b2cs || [];
+      if (b2cs.length > 0) {
+        let b2cPartyId = null;
+        const b2cExist = await client.query(
+          `SELECT id FROM parties WHERE business_id=$1 AND name='B2C (Unregistered Buyers)' LIMIT 1`,
+          [req.business.id]
+        );
+        if (b2cExist.rows.length) {
+          b2cPartyId = b2cExist.rows[0].id;
+        } else {
+          const inserted = await client.query(
+            `INSERT INTO parties (business_id, name, party_type, opening_balance)
+             VALUES ($1,'B2C (Unregistered Buyers)','customer',0) RETURNING id`,
+            [req.business.id]
+          );
+          b2cPartyId = inserted.rows[0].id;
+        }
+
+        for (const entry of b2cs) {
+          const invoiceDate = new Date().toISOString().split('T')[0];
+          const taxable = parseFloat(entry.txval || 0);
+          const igst    = parseFloat(entry.iamt  || 0);
+          const cgst    = parseFloat(entry.camt  || 0);
+          const sgst    = parseFloat(entry.samt  || 0);
+          const total   = round2(taxable + igst + cgst + sgst);
+          const b2cNum  = `B2C-${ret_period}-${entry.pos || 'XX'}`;
+
+          const dup = await client.query(
+            `SELECT id FROM invoices WHERE business_id=$1 AND invoice_number=$2 LIMIT 1`,
+            [req.business.id, b2cNum]
+          );
+          if (!dup.rows.length) {
+            await client.query(
+              `INSERT INTO invoices
+                 (business_id, party_id, invoice_number, invoice_type, invoice_date,
+                  place_of_supply, is_igst, subtotal, discount_amount, taxable_amount,
+                  igst_amount, cgst_amount, sgst_amount, total_tax, total_amount, status, notes)
+               VALUES ($1,$2,$3,'sale',$4,$5,$6,$7,0,$8,$9,$10,$11,$12,$13,'paid','B2C aggregate — GST sync')`,
+              [
+                req.business.id, b2cPartyId, b2cNum, invoiceDate,
+                entry.pos || biz.state_code, igst > 0 && cgst === 0,
+                total, taxable, igst, cgst, sgst, round2(igst + cgst + sgst), total,
+              ]
+            );
+            invoicesCreated++;
+          } else {
+            invoicesSkipped++;
+          }
+        }
+      }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // PART 2: GSTR-2A — fetch purchase invoices from your SUPPLIERS
+    // API: GET /gst/taxpayer/returns/gstr2a?gstin=&ret_period=
+    // These become expenses (purchases) in your books.
+    // ────────────────────────────────────────────────────────────────────────
+    let gstr2aData = null;
+    let gstr2aError = null;
+    let expensesCreated = 0;
+    let expensesSkipped = 0;
+    let partiesCreated = 0;
+
+    try {
+      gstr2aData = await sbFetch(
+        `/gst/taxpayer/returns/gstr2a?gstin=${stored.gstin}&ret_period=${ret_period}`,
+        {
+          method: 'GET',
+          headers: buildHeaders({ 'x-auth-token': stored.auth_token }),
+        }
+      );
+    } catch (e) {
+      gstr2aError = e.message;
+    }
+
+    if (gstr2aData) {
+      const suppliers = gstr2aData?.data?.b2b || gstr2aData?.b2b || [];
+
+      for (const supplier of suppliers) {
+        const supplierGstin = supplier.ctin;
+        const supplierName  = supplier.trdnm || supplier.tradeName || supplierGstin;
+        const stateCode     = supplierGstin ? supplierGstin.slice(0, 2) : null;
+
+        // Count existing parties to detect if we create a new one
+        const existCheck = await client.query(
+          `SELECT id FROM parties WHERE business_id=$1 AND gstin=$2 LIMIT 1`,
+          [req.business.id, supplierGstin]
+        );
+        if (!existCheck.rows.length) partiesCreated++;
+
+        const supplierId = await upsertParty({
+          name: supplierName,
+          gstin: supplierGstin,
+          state_code: stateCode,
+          party_type: 'supplier',
+        });
+
+        const invoices = supplier.inv || [];
+        for (const inv of invoices) {
+          const invoiceNum  = inv.inum;
+          const invoiceDate = parseGSTDate(inv.idt);
+          const totalVal    = parseFloat(inv.val || 0);
+
+          let taxableAmount = 0, igst = 0, cgst = 0, sgst = 0;
+          (inv.itms || []).forEach(itm => {
+            const d = itm.itm_det || itm;
+            taxableAmount += parseFloat(d.txval || 0);
+            igst          += parseFloat(d.iamt  || 0);
+            cgst          += parseFloat(d.camt  || 0);
+            sgst          += parseFloat(d.samt  || 0);
+          });
+          const gstAmount = round2(igst + cgst + sgst);
+          const totalAmount = round2(taxableAmount + gstAmount) || totalVal;
+
+          // Deduplicate by vendor reference number + party
+          const dup = await client.query(
+            `SELECT id FROM expenses
+             WHERE business_id=$1 AND party_id=$2 AND vendor_invoice=$3 LIMIT 1`,
+            [req.business.id, supplierId, invoiceNum]
+          );
+          if (dup.rows.length) { expensesSkipped++; continue; }
+
+          await client.query(
+            `INSERT INTO expenses
+               (business_id, party_id, expense_date, category, description,
+                amount, gst_rate, gst_amount, total_amount,
+                itc_eligible, gstr2a_matched, payment_mode, vendor_invoice)
+             VALUES ($1,$2,$3,'Purchase',$4,$5,$6,$7,$8,true,true,'credit',$9)`,
+            [
+              req.business.id, supplierId, invoiceDate,
+              `GSTR-2A sync — ${supplierName} (${invoiceNum})`,
+              taxableAmount,
+              (inv.itms?.[0]?.itm_det?.rt || 18),
+              gstAmount,
+              totalAmount,
+              invoiceNum,
+            ]
+          );
+          expensesCreated++;
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+
+    // ── Log the sync ──────────────────────────────────────────────────────
+    await query(
+      `INSERT INTO activity_log (business_id, user_id, action, entity_type, description)
+       VALUES ($1,$2,'gst_portal_sync','sync',$3)`,
+      [
+        req.business.id,
+        req.user.id,
+        `GST Sync for ${period}: ${invoicesCreated} invoices, ${expensesCreated} expenses, ${partiesCreated} new parties`,
+      ]
+    );
+
+    ok(res, {
+      success: true,
+      period,
+      gstr1: {
+        fetched: !gstr1Error,
+        error: gstr1Error || null,
+        invoices_created: invoicesCreated,
+        invoices_skipped: invoicesSkipped,
+      },
+      gstr2a: {
+        fetched: !gstr2aError,
+        error: gstr2aError || null,
+        expenses_created: expensesCreated,
+        expenses_skipped: expensesSkipped,
+        parties_created: partiesCreated,
+      },
+      message: `Sync complete! ${invoicesCreated} invoices and ${expensesCreated} expenses imported from GST portal.`,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
