@@ -1044,6 +1044,7 @@
           <div class="form-group"><label>GST Client Secret</label><input id="wb-client-secret" type="password" placeholder="GSTS145e7e21-..." /></div>
           <div class="form-group"><label>GSTIN (your business)</label><input id="wb-gstin" placeholder="27AAGCB1286Q1Z4" /></div>
           <div class="form-group"><label>GST Username</label><input id="wb-gst-username" placeholder="MH_NT2.1641" /></div>
+          <div class="form-group"><label>WhiteBooks Account Email <span style="color:var(--danger);font-size:11px;">*</span></label><input id="wb-email" type="email" placeholder="email@yourdomain.com (registered on developer.whitebooks.in)" /></div>
           <div class="form-group"><label>e-Invoice Client ID <span style="color:var(--hint);font-size:11px;">(optional)</span></label><input id="wb-einv-client-id" placeholder="EINS54322623-..." /></div>
           <div class="form-group"><label>e-Invoice Client Secret</label><input id="wb-einv-secret" type="password" placeholder="EINS534e0db1-..." /></div>
         </div>
@@ -2158,6 +2159,7 @@
       const d = res.data || {};
       if (d.wb_client_id) {
         document.getElementById('wb-client-id').value = d.wb_client_id || '';
+        if (document.getElementById('wb-email')) document.getElementById('wb-email').value = d.wb_email || '';
         document.getElementById('wb-gstin').value = d.wb_gstin || '';
         document.getElementById('wb-gst-username').value = d.wb_gst_username || '';
         if (d.wb_einv_client_id) document.getElementById('wb-einv-client-id').value = d.wb_einv_client_id;
@@ -2180,6 +2182,7 @@
           wb_client_secret: document.getElementById('wb-client-secret').value.trim(),
           wb_gstin: document.getElementById('wb-gstin').value.trim(),
           wb_gst_username: document.getElementById('wb-gst-username').value.trim(),
+          wb_email: document.getElementById('wb-email').value.trim(),
           wb_einv_client_id: document.getElementById('wb-einv-client-id').value.trim() || null,
           wb_einv_client_secret: document.getElementById('wb-einv-secret').value.trim() || null,
         }),
@@ -2202,7 +2205,8 @@
     btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending OTP…';
     result.style.display = 'none';
     try {
-      const res = await apiFetch('/wb/otp/send', { method: 'POST', body: JSON.stringify({}) });
+      const wbEmail = document.getElementById('wb-email')?.value.trim() || '';
+      const res = await apiFetch('/wb/otp/send', { method: 'POST', body: JSON.stringify({ email: wbEmail }) });
       const msg = res.data?.message || 'OTP sent';
       const sandboxOtp = res.data?.sandbox_otp;
       _wbTxn = res.data?.txn || '';
