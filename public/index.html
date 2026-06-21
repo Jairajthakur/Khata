@@ -2195,6 +2195,7 @@
   }
 
   // ── WhiteBooks: Send OTP (Step 1) ────────────────────────────────────────
+  let _wbTxn = ''; // store txn from Send OTP to pass to Verify OTP
   async function wbSendOtp() {
     const btn = document.getElementById('wb-otp-btn');
     const result = document.getElementById('wb-test-result');
@@ -2204,6 +2205,7 @@
       const res = await apiFetch('/wb/otp/send', { method: 'POST', body: JSON.stringify({}) });
       const msg = res.data?.message || 'OTP sent';
       const sandboxOtp = res.data?.sandbox_otp;
+      _wbTxn = res.data?.txn || '';
       // Show OTP input row
       const otpRow = document.getElementById('wb-otp-row');
       otpRow.style.display = 'block';
@@ -2231,7 +2233,7 @@
     if (!otp) { result.style.display='block'; result.style.color='var(--danger)'; result.innerHTML='Enter the OTP first'; return; }
     btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying…';
     try {
-      const res = await apiFetch('/wb/otp/verify', { method: 'POST', body: JSON.stringify({ otp }) });
+      const res = await apiFetch('/wb/otp/verify', { method: 'POST', body: JSON.stringify({ otp, txn: _wbTxn }) });
       result.style.display = 'block';
       result.style.color = 'var(--accent)';
       result.innerHTML = '<i class="fas fa-check-circle"></i> ' + (res.data?.message || 'Connected!');
