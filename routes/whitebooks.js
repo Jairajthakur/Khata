@@ -153,7 +153,7 @@ async function wbPost(path, headers, body) {
 // ─── Load credentials from DB ─────────────────────────────────────────────────
 async function getCreds(businessId) {
   const r = await query(
-    'SELECT wb_client_id, wb_client_secret, wb_gstin, wb_gst_username FROM businesses WHERE id = $1',
+    'SELECT wb_client_id, wb_client_secret, wb_gstin, wb_gst_username, wb_email FROM businesses WHERE id = $1',
     [businessId]
   );
   const b = r.rows[0];
@@ -184,7 +184,7 @@ router.use(authenticate, requireBusiness);
 router.get('/config', async (req, res, next) => {
   try {
     const result = await query(
-      `SELECT wb_client_id, wb_gstin, wb_gst_username, wb_einv_client_id, wb_enabled
+      `SELECT wb_client_id, wb_gstin, wb_gst_username, wb_email, wb_einv_client_id, wb_enabled
        FROM businesses WHERE id = $1`,
       [req.business.id]
     );
@@ -204,14 +204,17 @@ router.post('/config', async (req, res, next) => {
       wb_einv_client_id, wb_einv_client_secret,
     } = req.body;
 
+    const { wb_email } = req.body;
     await query(
       `UPDATE businesses SET
          wb_client_id=$1, wb_client_secret=$2, wb_gstin=$3, wb_gst_username=$4,
          wb_einv_client_id=$5, wb_einv_client_secret=$6,
+         wb_email=$7,
          wb_enabled=true, updated_at=NOW()
-       WHERE id=$7`,
+       WHERE id=$8`,
       [wb_client_id, wb_client_secret, wb_gstin, wb_gst_username,
        wb_einv_client_id || null, wb_einv_client_secret || null,
+       wb_email || null,
        req.business.id]
     );
     // Clear any cached token so next request re-authenticates
@@ -225,7 +228,8 @@ router.post('/config', async (req, res, next) => {
 router.post('/otp/send', async (req, res, next) => {
   try {
     const creds = await getCreds(req.business.id);
-    const email = req.body.email || req.user?.email || '';
+    const email = req.body.email || creds.wb_email || req.user?.email || '';
+    console.log('[WhiteBooks] Sending OTP for email:', email);
 
     let data = {};
     try {
@@ -271,7 +275,9 @@ router.post('/otp/send', async (req, res, next) => {
 router.post('/otp/verify', async (req, res, next) => {
   try {
     const creds = await getCreds(req.business.id);
-    const { otp, email } = req.body;
+    const { otp } = req.body;
+    const email = req.body.email || creds.wb_email || req.user?.email || '';
+    console.log('[WhiteBooks] Verifying OTP for email:', email, 'otp:', otp);
 
     if (!otp) return res.status(400).json({ error: 'OTP is required' });
 
@@ -287,7 +293,7 @@ router.post('/otp/verify', async (req, res, next) => {
 
     const data = await wbGet('/authentication/authtoken',
       wbHeaders(creds, { txn }),
-      { email: email || req.user?.email || '', otp }
+      { email, otp }
     );
 
     console.log('[WhiteBooks] authtoken response:', JSON.stringify(data).slice(0, 500));
@@ -384,7 +390,8 @@ router.post('/otp/sandbox-connect', async (req, res, next) => {
   }
   try {
     const creds = await getCreds(req.business.id);
-    const email = req.body.email || req.user?.email || '';
+    const email = req.body.email || creds.wb_email || req.user?.email || '';
+    console.log('[WhiteBooks] Sending OTP for email:', email);
 
     // Step 1: Request OTP
     const otpData = await wbGet('/authentication/otprequest', wbHeaders(creds), { email });
